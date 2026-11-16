@@ -7,7 +7,36 @@ const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
 const people = () => D.filter(e => e.t === 'p');
 const places = () => D.filter(e => e.t === 'l');
-const kidsOf = id => D.filter(e => (e.father || []).includes(id) || (e.mother || []).includes(id));
+function kidsOf(id) {
+  const person = M[id];
+  const linked = D.filter(x => (x.father || []).includes(id) || (x.mother || []).includes(id));
+  const listed = (person && person.children) ? person.children.map(cid => linked.find(x => x.id === cid)).filter(Boolean) : [];
+  const rest = linked.filter(x => !listed.some(y => y.id === x.id));
+  return listed.concat(rest);
+}
+const uniq = arr => [...new Set(arr.filter(Boolean))];
+function coParents(id) {
+  const e = M[id];
+  const fromKids = kidsOf(id).flatMap(k => [...(k.father || []), ...(k.mother || [])].filter(x => x !== id));
+  return uniq([...(e.spouse || []), ...fromKids]).filter(x => M[x]);
+}
+function kidsWith(id, other) {
+  return kidsOf(id).filter(k => (k.father || []).includes(other) || (k.mother || []).includes(other));
+}
+function fullSiblings(id) {
+  const e = M[id];
+  const fa = e.father || [], mo = e.mother || [];
+  if (!fa.length && !mo.length) return e.siblings || [];
+  return D.filter(x => {
+    if (x.id === id || x.t !== 'p') return false;
+    const sameFa = fa.length && (x.father || []).some(p => fa.includes(p));
+    const sameMo = mo.length && (x.mother || []).some(p => mo.includes(p));
+    return fa.length && mo.length ? (sameFa && sameMo) : (sameFa || sameMo);
+  }).map(x => x.id);
+}
+function chips(ids) {
+  return `<div class="flex flex-wrap gap-2">${ids.map(id => M[id] ? `<a href="#p/${id}" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface font-label-md text-label-md no-underline">${esc(M[id].hi)}</a>` : '').join('')}</div>`;
+}
 const letterOf = e => shortEn(e).charAt(0).toUpperCase();
 
 let D = [], M = {};
@@ -20,6 +49,8 @@ const POPULAR = ['jesus', 'david', 'abraham', 'mary'];
 const TREES = [
   { id: 'adam', label: 'Adam' },
   { id: 'abraham', label: 'Abraham' },
+  { id: 'isaac', label: 'Isaac' },
+  { id: 'jacob', label: 'Jacob' },
   { id: 'moses', label: 'Moses' },
   { id: 'david', label: 'David' },
   { id: 'jesus', label: 'Jesus' }
@@ -376,23 +407,32 @@ function savedView() {
 }
 
 function familyBits(e) {
-  const groups = [
-    ['father', 'Father'], ['mother', 'Mother'], ['spouse', 'Spouse'],
-    ['siblings', 'Siblings'], ['children', 'Children']
-  ];
-  const rels = groups.map(([k, lab]) => {
-    const ids = k === 'children' ? kidsOf(e.id).map(x => x.id) : (e[k] || []);
-    if (!ids.length) return '';
-    return `<div class="mb-2"><div class="font-label-sm text-label-sm text-on-surface-variant mb-1">${lab}</div>
-      <div class="flex flex-wrap gap-2">${ids.map(id => M[id] ? `<a href="#p/${id}" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface font-label-md text-label-md no-underline">${esc(M[id].hi)}</a>` : '').join('')}</div></div>`;
-  }).filter(Boolean);
-  if (!rels.length) return '';
+  const parts = [];
+  const row = (lab, ids) => {
+    if (!ids.length) return;
+    parts.push(`<div class="mb-2"><div class="font-label-sm text-label-sm text-on-surface-variant mb-1">${lab}</div>${chips(ids)}</div>`);
+  };
+  row('Father', e.father || []);
+  row('Mother', e.mother || []);
+  const spouses = coParents(e.id);
+  row(spouses.length > 1 ? 'Spouses' : 'Spouse', spouses);
+  row('Siblings', fullSiblings(e.id));
+  const partners = coParents(e.id);
+  const grouped = new Set();
+  for (const p of partners) {
+    const kids = kidsWith(e.id, p).map(k => k.id);
+    kids.forEach(id => grouped.add(id));
+    if (kids.length) row(`Children with ${esc(shortHi(M[p]))}`, kids);
+  }
+  const leftover = kidsOf(e.id).map(k => k.id).filter(id => !grouped.has(id));
+  row('Children', leftover);
+  if (!parts.length) return '';
   return `<section class="bg-surface-container-low rounded-xl p-4 shadow-sm">
     <div class="flex items-center justify-between mb-3">
       <h3 class="font-headline-sm text-headline-sm font-semibold">Family</h3>
       <a href="#lineage/${e.id}" class="font-label-sm text-label-sm text-primary font-semibold hover:underline">View full tree</a>
     </div>
-    ${rels.join('')}
+    ${parts.join('')}
   </section>`;
 }
 
@@ -402,7 +442,7 @@ function detail(e) {
   scrollTo(0, 0);
   const saved = fav.has(e.id);
   const rootHint = isGk(e) ? 'Greek' : 'Hebrew';
-  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-md pt-space-sm">
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <div class="flex items-center justify-between">
       <button type="button" class="inline-flex items-center gap-1 text-primary font-label-md font-semibold" onclick="history.length>1?history.back():location.hash='home'">
         <span class="material-symbols-outlined text-[20px]">arrow_back</span> Back
@@ -504,28 +544,49 @@ function treeNode(id, kind) {
   </button>`;
 }
 
+function childBranch(id) {
+  const k = M[id];
+  if (!k) return '';
+  const ksp = k.spouse || [];
+  const grand = kidsOf(id);
+  let html = `<div class="tree-branch">${treeNode(id)}`;
+  if (ksp.length) html += `<div class="tree-row" style="margin-top:6px">${ksp.map(sid => treeNode(sid)).join('')}</div>`;
+  if (grand.length) {
+    html += `<div class="tree-line"></div><div class="wife-kids">${grand.map(g => treeNode(g.id)).join('')}</div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function spouseColumn(rootId, spouseId) {
+  const kids = kidsWith(rootId, spouseId);
+  let html = `<div class="wife-col">${treeNode(spouseId)}`;
+  if (kids.length) {
+    html += `<div class="tree-line"></div><div class="wife-kids">${kids.map(k => childBranch(k.id)).join('')}</div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderTree(rootId) {
   const e = M[rootId];
   if (!e) return '<p class="text-on-surface-variant">No family links for this name yet.</p>';
   const parents = [...(e.father || []), ...(e.mother || [])];
-  const spouses = e.spouse || [];
-  const sibs = e.siblings || [];
-  const kids = kidsOf(rootId);
+  const sibs = fullSiblings(rootId);
+  const partners = coParents(rootId);
+  const grouped = new Set();
+  partners.forEach(p => kidsWith(rootId, p).forEach(k => grouped.add(k.id)));
+  const leftover = kidsOf(rootId).filter(k => !grouped.has(k.id));
   let html = '<div class="tree">';
   if (parents.length) {
     html += `<div class="tree-row">${parents.map(id => treeNode(id)).join('')}</div><div class="tree-line"></div>`;
   }
-  html += `<div class="tree-row">${treeNode(rootId, 'me')}${spouses.map(id => treeNode(id)).join('')}${sibs.map(id => treeNode(id, 'side')).join('')}</div>`;
-  if (kids.length) {
+  html += `<div class="tree-row">${treeNode(rootId, 'me')}${sibs.map(id => treeNode(id, 'side')).join('')}</div>`;
+  if (partners.length || leftover.length) {
     html += `<div class="tree-line"></div><div class="tree-branch-row">`;
-    for (const k of kids) {
-      const ksp = k.spouse || [];
-      const grand = kidsOf(k.id);
-      html += `<div class="tree-branch">${treeNode(k.id)}${ksp.map(id => treeNode(id)).join('')}`;
-      if (grand.length) {
-        html += `<div class="tree-line"></div><div class="tree-row">${grand.map(g => treeNode(g.id)).join('')}</div>`;
-      }
-      html += `</div>`;
+    html += partners.map(id => spouseColumn(rootId, id)).join('');
+    if (leftover.length) {
+      html += `<div class="wife-col"><div class="tree-line"></div><div class="wife-kids">${leftover.map(k => childBranch(k.id)).join('')}</div></div>`;
     }
     html += `</div>`;
   }
@@ -536,16 +597,16 @@ function renderTree(rootId) {
 function lineageView(rootId) {
   setNav('lineage');
   const root = (rootId && M[rootId]) ? rootId : 'abraham';
-  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-md pt-space-sm">
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <div class="px-1">
       <h2 class="font-headline-md text-headline-md text-primary">Biblical Family Tree</h2>
-      <p class="font-body-sm text-body-sm text-on-surface-variant">Tap a name to open it. Filled terracotta marks the person in focus; olive rings are siblings.</p>
+      <p class="font-body-sm text-body-sm text-on-surface-variant">Grouped by mother. Tap a name to open it.</p>
     </div>
     <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
       ${TREES.map(t => `<button type="button" data-tree="${t.id}" class="flex-shrink-0 px-3.5 py-2 rounded-full font-label-md text-label-md ${t.id === root ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface-container text-on-surface-variant'}">${esc(M[t.id] ? M[t.id].hi : t.label)}</button>`).join('')}
     </div>
-    <section class="bg-surface-container-low rounded-xl p-4 shadow-sm overflow-x-auto">
-      ${renderTree(root)}
+    <section class="bg-surface-container-low rounded-xl p-3 shadow-sm">
+      <div class="tree-scroll">${renderTree(root)}</div>
     </section>
   </div>`;
   app.querySelectorAll('[data-tree]').forEach(b => b.onclick = () => { location.hash = 'lineage/' + b.dataset.tree; });
@@ -554,7 +615,7 @@ function lineageView(rootId) {
 function mapView() {
   setNav('map');
   const list = places();
-  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-md pt-space-sm">
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <div class="flex items-center justify-between px-1">
       <h2 class="font-headline-md text-headline-md text-primary">Holy Places &amp; Cities</h2>
       <span class="font-label-sm text-label-sm text-on-surface-variant">${list.length} places</span>
