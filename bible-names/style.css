@@ -1,23 +1,64 @@
-@font-face{font-family:Inter;src:url(fonts/Inter.woff2)}@font-face{font-family:"Noto Sans Devanagari";src:url(fonts/NotoSansDevanagari.woff2)}
-@font-face{font-family:"Noto Serif Hebrew";src:url(fonts/NotoSerifHebrew.woff2)}@font-face{font-family:"Noto Serif Greek";src:url(fonts/NotoSerifGreek.woff2)}
-:root{--bg:#f5f3ff;--card:#fff;--fg:#1e1b4b;--mut:#6b7280;--acc:#4f46e5;--chip:#eef2ff}
-.dark{--bg:#0f0e1a;--card:#1c1a2e;--fg:#ede9fe;--mut:#a1a1aa;--acc:#a5b4fc;--chip:#2a2745}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:Inter,"Noto Sans Devanagari",sans-serif;-webkit-tap-highlight-color:transparent}
-header{position:sticky;top:0;z-index:9;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:linear-gradient(90deg,#4f46e5,#9333ea);color:#fff}
-header h1{font-size:20px;margin:0}header h1 span{opacity:.8;font-weight:500}header button{background:none;border:0;font-size:22px;color:#fff}
-main{max-width:640px;margin:auto;padding:12px}
-.search{width:100%;font-size:18px;padding:12px 16px;border-radius:14px;border:2px solid var(--chip);background:var(--card);color:var(--fg);margin:8px 0}
-.tabs{display:flex;gap:8px;margin:4px 0 12px}.tabs button,.chip{border:0;border-radius:99px;padding:7px 14px;background:var(--chip);color:var(--fg);font-size:15px;cursor:pointer}
-.tabs button.on{background:var(--acc);color:#fff}.dark .tabs button.on{color:#111}
-.card{background:var(--card);border-radius:18px;padding:16px;margin:10px 0;box-shadow:0 2px 10px #0000000f;border-left:6px solid var(--c,#4f46e5);cursor:pointer}
-.row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
-.hi{font-size:26px;font-weight:700}.orig{font-family:"Noto Serif Hebrew","Noto Serif Greek",serif;font-size:26px;direction:rtl}.orig.gk{direction:ltr}
-.pr{color:var(--acc);font-size:17px}.en{color:var(--mut);font-size:15px}.m{font-size:19px;margin:6px 0}
-.lbl{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin-top:12px}
-.potd{background:linear-gradient(135deg,#f59e0b,#ec4899);color:#fff;border:0}.potd .en,.potd .pr,.potd .lbl{color:#fff;opacity:.9}
-.verse{font-size:17px;line-height:1.6;background:var(--chip);padding:10px 12px;border-radius:12px}
-.acts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}.acts button{flex:1;border:0;border-radius:12px;padding:11px;font-size:15px;background:var(--acc);color:#fff}
-.dark .acts button{color:#111}.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
-.tree{text-align:center}.tree .gen{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;margin:6px 0}.tree .me{background:var(--acc);color:#fff}.tree .ar{color:var(--mut)}
-#map{height:220px;border-radius:14px;margin-top:8px}.back{background:none;border:0;color:var(--acc);font-size:16px;padding:6px 0;cursor:pointer}
-footer{text-align:center;color:var(--mut);font-size:12px;padding:20px}
+@font-face{font-family:"Noto Sans Devanagari";src:url(fonts/NotoSansDevanagari.woff2) format("woff2");font-display:swap}
+
+@layer base{
+  html,body{width:100vw;margin:0;padding:0}
+  body{overscroll-behavior:none;min-height:max(884px,100dvh);background:#fff8f8}
+  .pb-safe{padding-bottom:env(safe-area-inset-bottom,0px)}
+  .pt-safe{padding-top:env(safe-area-inset-top,0px)}
+}
+::-webkit-scrollbar{display:none}
+
+.material-symbols-outlined{font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24;user-select:none}
+.heb{font-family:"Noto Serif Hebrew","Noto Serif",serif !important;direction:rtl;unicode-bidi:isolate;font-weight:600;display:inline-block;flex-shrink:0;white-space:nowrap;min-width:max-content}
+.gk{font-family:"Noto Serif Greek","Noto Serif",serif !important;direction:ltr;font-weight:600;display:inline-block;flex-shrink:0;white-space:nowrap}
+
+.logo-seal{
+  width:32px;height:32px;border-radius:50%;
+  background:#9e432a;color:#fff;
+  font-family:"Noto Serif Devanagari","Noto Serif",serif;
+  font-weight:700;font-size:16px;line-height:32px;text-align:center;
+  box-shadow:0 1px 3px rgba(158,67,42,.25);
+}
+
+.nav-tab.on .tab-indicator{background:#e0e7b6}
+.nav-tab.on .tab-icon{color:#444a26}
+.nav-tab.on .tab-label{color:#1e1b1c;font-weight:600}
+
+.eq-bar{width:3px;border-radius:99px;background:#d9822b;display:inline-block}
+.eq-bar.play{animation:eq 0.8s ease-in-out infinite}
+.eq-bar.play:nth-child(2){animation-delay:.15s}
+.eq-bar.play:nth-child(3){animation-delay:.3s}
+.eq-bar.play:nth-child(4){animation-delay:.08s}
+@keyframes eq{0%,100%{height:6px}50%{height:14px}}
+
+.tree{display:flex;flex-direction:column;align-items:center;gap:0;padding:8px 0 16px}
+.tree-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:stretch;gap:8px;width:100%}
+.tree-line{width:2px;height:18px;background:#dcc0ba;margin:2px auto}
+.tree-branch{display:flex;flex-direction:column;align-items:center;min-width:0;padding:0 4px}
+.tree-branch-row{display:flex;flex-wrap:nowrap;justify-content:center;align-items:flex-start;gap:10px;width:100%;
+  border-top:2px solid #dcc0ba;padding-top:14px;margin-top:2px;overflow-x:auto}
+.tree-node{
+  background:#fbf1f2;border:1px solid #e3d8c8;border-radius:8px;
+  padding:8px 10px 8px 22px;text-align:left;cursor:pointer;position:relative;
+  min-width:86px;max-width:130px;box-shadow:0 1px 3px rgba(158,67,42,.04);
+}
+.tree-node .dot{position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  width:8px;height:8px;border-radius:50%;background:#9e432a}
+.tree-node.side .dot{background:transparent;border:2px solid #5c623b}
+.tree-node.me{background:#9e432a;border-color:#7f2c15;color:#fff}
+.tree-node.me .dot{background:#ffd0ac}
+.tree-node.me .tn-en{color:#ffcfc3}
+.tn-hi{display:block;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:600;font-size:15px;line-height:1.3}
+.tn-en{display:block;font-size:11px;color:#56423d;margin-top:1px}
+
+#mapel{height:260px;width:100%;border-radius:12px;overflow:hidden;z-index:0}
+.place-hero{height:144px;background-size:cover;background-position:center;position:relative}
+
+.sheet{position:fixed;inset:0;z-index:80}
+.sheet-bg{position:absolute;inset:0;background:rgba(35,31,32,.4)}
+.sheet-card{position:absolute;left:0;right:0;bottom:0;background:#fff8f8;
+  border-radius:16px 16px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom,0px));
+  box-shadow:0 8px 24px -4px rgba(35,31,32,.12);max-height:80vh;overflow:auto}
+
+.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+.no-scrollbar::-webkit-scrollbar{display:none}
