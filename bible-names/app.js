@@ -38,12 +38,21 @@ function chips(ids) {
   return `<div class="flex flex-wrap gap-2">${ids.map(id => M[id] ? `<a href="#p/${id}" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface font-label-md text-label-md no-underline">${esc(M[id].hi)}</a>` : '').join('')}</div>`;
 }
 const letterOf = e => shortEn(e).charAt(0).toUpperCase();
+function genderIcon(g) {
+  if (g === 'f') return `<span class="g-icon g-f" title="Female" aria-label="Female"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="9" r="5"/><path d="M12 14v8M9 19h6"/></svg></span>`;
+  if (g === 'm') return `<span class="g-icon g-m" title="Male" aria-label="Male"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="10" cy="14" r="5"/><path d="M14 10l6-6M15 4h5v5"/></svg></span>`;
+  if (g === 'd') return `<span class="g-icon g-d" title="Divine" aria-label="Divine">✦</span>`;
+  return '';
+}
+const women = () => people().filter(e => e.g === 'f');
+
 
 let D = [], M = {};
 let q = '', chip = 'all', letter = '';
 let speakLang = 'hi';
 let fav = new Set(JSON.parse(localStorage.getItem('hn-fav') || '[]'));
 let mapObj = null;
+let C = {};
 
 const POPULAR = ['jesus', 'david', 'abraham', 'mary'];
 const TREES = [
@@ -137,10 +146,12 @@ function aboutSheet() {
 }
 
 function setNav(path) {
-  const labels = { home: 'Home', people: 'People', lineage: 'Lineage', map: 'Map', saved: 'Saved', detail: 'Name' };
+  const labels = { home: 'Home', people: 'People', lineage: 'Lineage', map: 'Map', more: 'More', saved: 'Saved', detail: 'Name', finder: 'Name finder', quiz: 'Quiz', timeline: 'Timeline', genealogy: 'Genealogy', gods: 'Names of God', women: 'Women', card: 'Name card' };
+  const morePages = ['more','finder','quiz','timeline','genealogy','gods','women','card'];
   document.getElementById('hdrSub').textContent = '• ' + (labels[path] || 'Home');
   document.querySelectorAll('.nav-tab').forEach(a => {
-    a.classList.toggle('on', a.dataset.path === (path === 'detail' ? '' : path));
+    const tab = morePages.includes(path) ? 'more' : (path === 'detail' ? '' : path);
+    a.classList.toggle('on', a.dataset.path === tab);
   });
 }
 
@@ -169,7 +180,7 @@ function nameCard(e) {
     <div class="flex justify-between items-start">
       <div>
         <div class="flex items-baseline gap-2 flex-wrap">
-          <h4 class="font-headline-sm text-headline-sm font-bold text-on-surface">${esc(e.hi)}</h4>
+          <h4 class="font-headline-sm text-headline-sm font-bold text-on-surface inline-flex items-center gap-1.5">${genderIcon(e.g)} ${esc(e.hi)}</h4>
           <span class="font-label-sm text-label-sm text-on-surface-variant font-medium">(${esc(shortEn(e))})</span>
         </div>
         <div class="text-[18px] leading-tight text-primary font-semibold mt-0.5 ${origCls(e)}">${esc(e.o)}</div>
@@ -328,7 +339,8 @@ function home() {
             <span class="text-on-surface-variant font-label-sm text-label-sm">• ${esc(THOUGHT.tag)}</span>
           </div>
         </div>
-      </section>`;
+      </section>
+      ${exploreTiles()}`;
   }
 
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-lg">
@@ -462,7 +474,7 @@ function detail(e) {
       <div class="flex justify-between items-start gap-3">
         <div>
           <div class="flex items-baseline gap-3 flex-wrap">
-            <h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary tracking-tight">${esc(e.hi)}</h1>
+            <h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary tracking-tight inline-flex items-center gap-2">${genderIcon(e.g)} ${esc(e.hi)}</h1>
             <span class="text-[26px] leading-tight text-on-surface-variant ${origCls(e)}">${esc(e.o)}</span>
           </div>
           <div class="font-label-md text-label-md text-on-surface-variant mt-1">${esc(e.en)}</div>
@@ -507,9 +519,10 @@ function detail(e) {
 
     ${familyBits(e)}
 
-    <div class="flex gap-2">
+    <div class="flex gap-2 flex-wrap">
       <button type="button" id="btnShare2" class="flex-1 rounded-xl bg-primary text-on-primary py-3 font-label-lg font-semibold">Share</button>
       <button type="button" id="btnWa" class="flex-1 rounded-xl bg-secondary text-on-secondary py-3 font-label-lg font-semibold">WhatsApp</button>
+      <button type="button" id="btnCard" class="flex-1 rounded-xl bg-tertiary-container text-on-tertiary-container py-3 font-label-lg font-semibold">Name card</button>
     </div>
   </div>`;
 
@@ -522,6 +535,7 @@ function detail(e) {
   document.getElementById('btnShare').onclick = () => doShare(e);
   document.getElementById('btnShare2').onclick = () => doShare(e);
   document.getElementById('btnWa').onclick = () => open('https://wa.me/?text=' + encodeURIComponent(shareText(e)));
+  document.getElementById('btnCard').onclick = () => { location.hash = 'card/' + e.id; };
   app.querySelectorAll('.lang-btn').forEach(b => b.onclick = () => { speakLang = b.dataset.lang; detail(e); });
   if (e.ll) {
     const go = () => {
@@ -538,31 +552,31 @@ function treeNode(id, kind) {
   const e = M[id];
   if (!e) return '';
   return `<button type="button" class="tree-node ${kind || ''}" onclick="location.hash='p/${id}'">
-    <span class="dot"></span>
+    ${genderIcon(e.g)}
     <span class="tn-hi">${esc(shortHi(e))}</span>
     <span class="tn-en">${esc(shortEn(e))}</span>
   </button>`;
 }
 
-function childBranch(id) {
-  const k = M[id];
-  if (!k) return '';
-  const ksp = k.spouse || [];
-  const grand = kidsOf(id);
-  let html = `<div class="tree-branch">${treeNode(id)}`;
-  if (ksp.length) html += `<div class="tree-row" style="margin-top:6px">${ksp.map(sid => treeNode(sid)).join('')}</div>`;
-  if (grand.length) {
-    html += `<div class="tree-line"></div><div class="wife-kids">${grand.map(g => treeNode(g.id)).join('')}</div>`;
-  }
-  html += '</div>';
-  return html;
+function coupleRow(a, b, aKind, bKind) {
+  if (a && !b) return treeNode(a, aKind);
+  if (!a && b) return treeNode(b, bKind);
+  if (!a && !b) return '';
+  return `<div class="couple">${treeNode(a, aKind)}<span class="couple-heart" aria-hidden="true">♥</span>${treeNode(b, bKind || '')}</div>`;
 }
 
-function spouseColumn(rootId, spouseId) {
-  const kids = kidsWith(rootId, spouseId);
-  let html = `<div class="wife-col">${treeNode(spouseId)}`;
-  if (kids.length) {
-    html += `<div class="tree-line"></div><div class="wife-kids">${kids.map(k => childBranch(k.id)).join('')}</div>`;
+// A married child is shown with their one spouse; their children hang below as names only.
+// Never expand a descendant's other wives (so Jacob's family does not appear on Isaac's tree).
+function descendantBlock(id) {
+  const k = M[id];
+  if (!k) return '';
+  const partners = coParents(id);
+  const primary = partners.length === 1 ? partners[0] : null;
+  let html = `<div class="tree-branch">`;
+  html += primary ? coupleRow(id, primary) : treeNode(id);
+  if (primary) {
+    const kids = kidsWith(id, primary);
+    if (kids.length) html += `<div class="tree-line"></div><div class="wife-kids">${kids.map(x => treeNode(x.id)).join('')}</div>`;
   }
   html += '</div>';
   return html;
@@ -571,22 +585,35 @@ function spouseColumn(rootId, spouseId) {
 function renderTree(rootId) {
   const e = M[rootId];
   if (!e) return '<p class="text-on-surface-variant">No family links for this name yet.</p>';
-  const parents = [...(e.father || []), ...(e.mother || [])];
+  const fa = (e.father || [])[0], mo = (e.mother || [])[0];
   const sibs = fullSiblings(rootId);
   const partners = coParents(rootId);
   const grouped = new Set();
   partners.forEach(p => kidsWith(rootId, p).forEach(k => grouped.add(k.id)));
   const leftover = kidsOf(rootId).filter(k => !grouped.has(k.id));
   let html = '<div class="tree">';
-  if (parents.length) {
-    html += `<div class="tree-row">${parents.map(id => treeNode(id)).join('')}</div><div class="tree-line"></div>`;
+  if (fa || mo) {
+    html += `<div class="tree-row">${coupleRow(fa, mo)}</div><div class="tree-line"></div>`;
   }
-  html += `<div class="tree-row">${treeNode(rootId, 'me')}${sibs.map(id => treeNode(id, 'side')).join('')}</div>`;
-  if (partners.length || leftover.length) {
+  if (partners.length <= 1) {
+    html += `<div class="tree-row"><div class="couple-col">`;
+    html += partners[0] ? coupleRow(rootId, partners[0], 'me') : treeNode(rootId, 'me');
+    const kids = partners[0] ? kidsWith(rootId, partners[0]) : leftover;
+    if (kids.length) {
+      html += `<div class="tree-line"></div><div class="tree-row">${kids.map(k => descendantBlock(k.id)).join('')}</div>`;
+    }
+    html += `</div>${sibs.map(id => treeNode(id, 'side')).join('')}</div>`;
+  } else {
+    html += `<div class="tree-row">${treeNode(rootId, 'me')}${sibs.map(id => treeNode(id, 'side')).join('')}</div>`;
     html += `<div class="tree-line"></div><div class="tree-branch-row">`;
-    html += partners.map(id => spouseColumn(rootId, id)).join('');
+    for (const p of partners) {
+      const kids = kidsWith(rootId, p);
+      html += `<div class="wife-col"><div class="couple"><span class="couple-heart">♥</span>${treeNode(p)}</div>`;
+      if (kids.length) html += `<div class="tree-line"></div><div class="wife-kids">${kids.map(k => descendantBlock(k.id)).join('')}</div>`;
+      html += `</div>`;
+    }
     if (leftover.length) {
-      html += `<div class="wife-col"><div class="tree-line"></div><div class="wife-kids">${leftover.map(k => childBranch(k.id)).join('')}</div></div>`;
+      html += `<div class="wife-col"><div class="tree-line"></div><div class="wife-kids">${leftover.map(k => descendantBlock(k.id)).join('')}</div></div>`;
     }
     html += `</div>`;
   }
@@ -600,7 +627,7 @@ function lineageView(rootId) {
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <div class="px-1">
       <h2 class="font-headline-md text-headline-md text-primary">Biblical Family Tree</h2>
-      <p class="font-body-sm text-body-sm text-on-surface-variant">Grouped by mother. Tap a name to open it.</p>
+      <p class="font-body-sm text-body-sm text-on-surface-variant">Each couple stands side by side (♥). Children appear under that couple, never as a spouse.</p>
     </div>
     <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
       ${TREES.map(t => `<button type="button" data-tree="${t.id}" class="flex-shrink-0 px-3.5 py-2 rounded-full font-label-md text-label-md ${t.id === root ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface-container text-on-surface-variant'}">${esc(M[t.id] ? M[t.id].hi : t.label)}</button>`).join('')}
@@ -612,44 +639,53 @@ function lineageView(rootId) {
   app.querySelectorAll('[data-tree]').forEach(b => b.onclick = () => { location.hash = 'lineage/' + b.dataset.tree; });
 }
 
-function mapView() {
+function mapView(journeyId) {
   setNav('map');
   const list = places();
+  const journeys = C.journeys || [];
+  const j = journeys.find(x => x.id === journeyId);
+  const tabs = [['','Places']].concat(journeys.map(x => [x.id, x.id === 'paul' ? 'Paul' : x.id === 'exodus' ? 'Exodus' : 'Abraham']));
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
-    <div class="flex items-center justify-between px-1">
-      <h2 class="font-headline-md text-headline-md text-primary">Holy Places &amp; Cities</h2>
-      <span class="font-label-sm text-label-sm text-on-surface-variant">${list.length} places</span>
-    </div>
+    <h2 class="font-headline-md text-headline-md text-primary">${j ? esc(j.hi) : 'Holy Places &amp; Cities'}</h2>
+    <div class="flex gap-2 overflow-x-auto no-scrollbar">${tabs.map(([id,lab]) => `<a href="${id?'#map/'+id:'#map'}" class="flex-shrink-0 px-3.5 py-2 rounded-full font-label-md no-underline ${(!j && !id) || (j && j.id===id)?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}">${lab}</a>`).join('')}</div>
+    ${j && j.approx ? '<p class="font-body-sm text-on-surface-variant">Approximate / traditional route. The exact path is debated.</p>' : (j ? `<p class="font-body-sm text-on-surface-variant">${esc(j.note||'')}</p>` : '')}
     <div id="mapel" class="shadow-sm"></div>
     <div id="placeInfo"></div>
-    <div class="grid grid-cols-1 gap-3.5">${list.map(placeCard).join('')}</div>
+    ${j ? `<ol class="font-body-md list-decimal ps-5">${j.stops.map(s=>`<li class="mb-1"><strong>${esc(s.hi)}</strong> <span class="text-on-surface-variant">(${esc(s.n)})</span></li>`).join('')}</ol>` : `<div class="grid grid-cols-1 gap-3.5">${list.map(placeCard).join('')}</div>`}
   </div>`;
-  bindClicks();
+  if (!j) bindClicks();
   const go = () => {
     if (!window.L) return setTimeout(go, 200);
     if (mapObj) { try { mapObj.remove(); } catch (err) {} mapObj = null; }
-    const m = L.map('mapel').setView([31.7, 35.2], 6);
+    const m = L.map('mapel');
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(m);
     mapObj = m;
-    const info = document.getElementById('placeInfo');
-    const select = e => {
-      m.setView(e.ll, 9);
-      info.innerHTML = `<div class="bg-surface-container-low rounded-xl p-4 shadow-sm">
-        <div class="flex items-baseline gap-2">
-          <h3 class="font-headline-sm text-headline-sm font-bold text-primary">${esc(e.hi)}</h3>
-          <span class="font-label-sm text-on-surface-variant">(${esc(shortEn(e))})</span>
-          <span class="ml-auto ${origCls(e)} text-primary font-semibold">${esc(e.o)}</span>
-        </div>
-        <p class="font-body-md text-body-md mt-1">“${esc(e.m)}”</p>
-        <p class="font-label-sm text-on-surface-variant mt-1">${esc(e.pr)} · ${esc(e.ref)}</p>
-        <a href="#p/${e.id}" class="inline-block mt-2 font-label-md text-primary font-semibold">View in Detail →</a>
-      </div>`;
-    };
-    list.forEach(e => {
-      if (!e.ll) return;
-      L.marker(e.ll).addTo(m).bindPopup(e.hi).on('click', () => select(e));
-    });
-    if (list[0]) select(list[0]);
+    if (j) {
+      const latlngs = j.stops.map(s => s.ll);
+      const line = L.polyline(latlngs, { color: '#9e432a', weight: 4, opacity: 0.85 }).addTo(m);
+      j.stops.forEach((s, i) => L.marker(s.ll).addTo(m).bindPopup((i+1)+'. '+s.hi+' ('+s.n+')'));
+      m.fitBounds(line.getBounds().pad(0.2));
+      const info = document.getElementById('placeInfo');
+      if (info) info.innerHTML = `<p class="font-body-sm text-on-surface-variant">${esc(j.note||'')}${j.approx?' This map is labelled approximate.':''}</p>`;
+    } else {
+      m.setView([31.7, 35.2], 6);
+      const info = document.getElementById('placeInfo');
+      const select = e => {
+        m.setView(e.ll, 9);
+        info.innerHTML = `<div class="bg-surface-container-low rounded-xl p-4 shadow-sm">
+          <div class="flex items-baseline gap-2">
+            <h3 class="font-headline-sm text-headline-sm font-bold text-primary">${esc(e.hi)}</h3>
+            <span class="font-label-sm text-on-surface-variant">(${esc(shortEn(e))})</span>
+            <span class="ml-auto ${origCls(e)} text-primary font-semibold">${esc(e.o)}</span>
+          </div>
+          <p class="font-body-md text-body-md mt-1">“${esc(e.m)}”</p>
+          <p class="font-label-sm text-on-surface-variant mt-1">${esc(e.pr)} · ${esc(e.ref)}</p>
+          <a href="#p/${e.id}" class="inline-block mt-2 font-label-md text-primary font-semibold">View in Detail →</a>
+        </div>`;
+      };
+      list.forEach(e => { if (e.ll) L.marker(e.ll).addTo(m).bindPopup(e.hi).on('click', () => select(e)); });
+      if (list[0]) select(list[0]);
+    }
   };
   go();
 }
@@ -710,6 +746,341 @@ function bindClicks() {
   }));
 }
 
+
+function exploreTiles() {
+  const tiles = [
+    ['#finder', 'search', "Your name's Bible meaning", 'Find a Bible name and its Hindi meaning'],
+    ['#quiz', 'quiz', 'Daily quiz', '5 questions a day, with a streak'],
+    ['#timeline', 'timeline', 'Timeline', 'Adam to Jesus (approximate dates)'],
+    ['#genealogy', 'account_tree', "Jesus' genealogy", 'Matthew 1 and Luke 3'],
+    ['#gods', 'wb_sunny', 'Names of God', 'El Shaddai, Yahweh Yireh, Immanuel…'],
+    ['#women', 'diversity_1', 'Women of the Bible', 'Sarah, Ruth, Mary, Deborah…'],
+    ['#map/abraham', 'explore', 'Journey maps', "Abraham, the Exodus, Paul's travels"],
+    ['#lineage', 'favorite', 'Family trees', 'Couples and children, grouped by mother']
+  ];
+  return `<section class="flex flex-col gap-3">
+    <div class="flex items-center justify-between px-1">
+      <h3 class="font-headline-sm text-headline-sm font-semibold">Explore</h3>
+      <a href="#more" class="font-label-sm text-label-sm text-primary font-semibold">All</a>
+    </div>
+    <div class="feature-grid">${tiles.map(([href,ic,ttl,sub]) => `<a class="feature-tile" href="${href}"><span class="material-symbols-outlined text-primary">${ic}</span><span class="ttl">${ttl}</span><span class="sub">${sub}</span></a>`).join('')}</div>
+  </section>`;
+}
+
+function moreView() {
+  setNav('more');
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
+    <h2 class="font-headline-md text-headline-md text-primary px-1">Explore</h2>
+    ${exploreTiles()}
+  </div>`;
+}
+
+function norm(s) {
+  return String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\u0900-\u097f]+/g, '');
+}
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
+    dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[m][n];
+}
+function finderScore(q, e) {
+  q = norm(q); if (!q) return 0;
+  const fields = [e.hi, shortHi(e), e.en, shortEn(e), e.pr].map(norm);
+  let best = 0;
+  for (const f of fields) {
+    if (!f) continue;
+    if (f === q) best = Math.max(best, 100);
+    else if (f.startsWith(q) || q.startsWith(f)) best = Math.max(best, 86);
+    else if (f.includes(q) || q.includes(f)) best = Math.max(best, 70);
+    else {
+      const d = lev(f.slice(0, Math.min(f.length, q.length + 2)), q);
+      best = Math.max(best, Math.max(0, 55 - d * 10));
+    }
+  }
+  return best;
+}
+
+let findQ = '', findG = 'all';
+function finderView() {
+  setNav('finder');
+  const pool = people().filter(e => e.g !== 'd' && (findG === 'all' || e.g === findG));
+  const ranked = findQ.trim()
+    ? pool.map(e => ({ e, s: finderScore(findQ, e) })).filter(x => x.s >= 25).sort((a, b) => b.s - a.s).slice(0, 20)
+    : [];
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
+    <h2 class="font-headline-md text-headline-md text-primary">Your name's Bible meaning</h2>
+    <p class="font-body-sm text-body-sm text-on-surface-variant">Type a Hindi or English name. We'll find matching or similar Bible names.</p>
+    <input id="fq" class="w-full bg-surface-container rounded-full px-5 py-3.5 font-body-md text-body-md text-on-surface" placeholder="e.g. David, दाऊद, Priya, Yohan…" value="${esc(findQ)}"/>
+    <div class="flex gap-2">${[['all','All'],['m','Boys'],['f','Girls']].map(([k,l]) => `<button type="button" data-fg="${k}" class="px-3.5 py-2 rounded-full font-label-md ${findG===k?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}">${l}</button>`).join('')}</div>
+    <div id="fres">${ranked.length ? ranked.map(x => nameCard(x.e)).join('') : (findQ.trim() ? '<p class="text-on-surface-variant">No close match. Try another spelling.</p>' : '<p class="text-on-surface-variant">Try “Sarah”, “सारा”, or “John”.</p>')}</div>
+  </div>`;
+  const input = document.getElementById('fq');
+  input.focus();
+  input.setSelectionRange(findQ.length, findQ.length);
+  input.addEventListener('input', () => { findQ = input.value; finderView(); });
+  app.querySelectorAll('[data-fg]').forEach(b => b.onclick = () => { findG = b.dataset.fg; finderView(); });
+  bindClicks();
+}
+
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function isYesterday(iso) {
+  const [y,m,d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d); dt.setDate(dt.getDate() + 1);
+  return todayKey() === dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+}
+function shuffle(a, seed) {
+  const out = a.slice();
+  let s = seed;
+  for (let i = out.length - 1; i > 0; i--) {
+    s = (s * 16807) % 2147483647;
+    const j = s % (i + 1);
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+function makeQuestions() {
+  const pool = people().filter(e => e.g !== 'd' && e.m && e.hi);
+  const seed = todayKey().split('-').reduce((a, x) => a + Number(x), 1);
+  const picked = shuffle(pool, seed).slice(0, 5);
+  return picked.map((e, i) => {
+    const type = i % 2 === 0 ? 'name' : 'meaning';
+    const opts = shuffle([e, ...shuffle(pool.filter(x => x.id !== e.id), seed + i + 3).slice(0, 3)], seed + i * 9);
+    return { id: e.id, type, opts: opts.map(x => x.id) };
+  });
+}
+function loadQuiz() {
+  const raw = JSON.parse(localStorage.getItem('hn-quiz') || '{}');
+  if (raw.date === todayKey() && raw.qs) return raw;
+  const keep = (raw.date && isYesterday(raw.date) && raw.done) ? (raw.streak || 0) : 0;
+  const state = { date: todayKey(), qs: makeQuestions(), i: 0, score: 0, done: false, streak: keep, picked: null };
+  localStorage.setItem('hn-quiz', JSON.stringify(state));
+  return state;
+}
+function saveQuiz(s) { localStorage.setItem('hn-quiz', JSON.stringify(s)); }
+
+function quizView() {
+  setNav('quiz');
+  const S = loadQuiz();
+  if (S.done || S.i >= S.qs.length) {
+    if (!S.done) { S.done = true; S.streak = (S.streak || 0) + 1; saveQuiz(S); }
+    app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
+      <h2 class="font-headline-md text-headline-md text-primary">Daily quiz</h2>
+      <div class="bg-surface-container-low rounded-xl p-5 text-center">
+        <p class="font-headline-lg-mobile text-primary font-bold">${S.score} / ${S.qs.length}</p>
+        <p class="font-body-md mt-2">Today's score</p>
+        <p class="font-label-lg text-tertiary mt-3">🔥 Streak: ${S.streak} day${S.streak===1?'':'s'}</p>
+        <p class="font-body-sm text-on-surface-variant mt-3">Come back tomorrow for a new set of five questions.</p>
+      </div>
+    </div>`;
+    return;
+  }
+  const q = S.qs[S.i];
+  const ans = M[q.id];
+  const prompt = q.type === 'name'
+    ? `Whose name means “${esc(ans.m)}”?`
+    : `What is the meaning of ${esc(ans.hi)} (${esc(shortEn(ans))})?`;
+  const label = o => q.type === 'name' ? `${o.hi} (${shortEn(o)})` : `“${o.m}”`;
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
+    <div class="flex items-center justify-between">
+      <h2 class="font-headline-md text-headline-md text-primary">Daily quiz</h2>
+      <span class="font-label-sm text-on-surface-variant">${S.i + 1} / ${S.qs.length} · 🔥 ${S.streak}</span>
+    </div>
+    <div class="bg-surface-container-low rounded-xl p-4 shadow-sm">
+      <p class="font-headline-sm text-headline-sm mb-2">${prompt}</p>
+      ${q.opts.map(id => `<button type="button" class="quiz-opt" data-opt="${id}">${esc(label(M[id]))}</button>`).join('')}
+    </div>
+  </div>`;
+  app.querySelectorAll('[data-opt]').forEach(b => b.onclick = () => {
+    if (S.picked) return;
+    S.picked = b.dataset.opt;
+    const ok = S.picked === q.id;
+    if (ok) S.score++;
+    app.querySelectorAll('[data-opt]').forEach(x => {
+      if (x.dataset.opt === q.id) x.classList.add('ok');
+      else if (x.dataset.opt === S.picked) x.classList.add('bad');
+    });
+    S.i++;
+    S.picked = null;
+    if (S.i >= S.qs.length) { S.done = true; S.streak = (S.streak || 0) + 1; }
+    saveQuiz(S);
+    setTimeout(quizView, 700);
+  });
+}
+
+function timelineView() {
+  setNav('timeline');
+  const items = (C.timeline || []).filter(x => M[x.id]);
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
+    <h2 class="font-headline-md text-headline-md text-primary">Timeline</h2>
+    <p class="font-body-sm text-on-surface-variant">${esc(C.timelineNote || 'Dates are approximate / traditional.')}</p>
+    <div class="tl">${items.map(x => {
+      const e = M[x.id];
+      return `<div class="tl-item"><a href="#p/${e.id}" class="no-underline text-inherit">
+        <div class="font-label-sm text-tertiary font-semibold">${esc(x.era)} <span class="text-on-surface-variant font-medium">· approximate</span></div>
+        <div class="font-headline-sm text-headline-sm inline-flex items-center gap-1.5">${genderIcon(e.g)} ${esc(e.hi)} <span class="font-label-sm text-on-surface-variant">(${esc(shortEn(e))})</span></div>
+        <div class="font-body-sm text-on-surface-variant">${esc(x.note || '')}</div>
+      </a></div>`;
+    }).join('')}</div>
+  </div>`;
+}
+
+function genealogyView(which) {
+  setNav('genealogy');
+  const tab = which === 'luke' ? 'luke' : 'matt';
+  const list = C[tab] || [];
+  const ref = tab === 'matt' ? C.mattRef : C.lukeRef;
+  const title = tab === 'matt' ? 'Matthew 1' : 'Luke 3';
+  const note = tab === 'matt'
+    ? 'Abraham → David → Jesus, as named in the IRV Hindi of Matthew 1.'
+    : 'Adam → Jesus, read in birth order from the IRV Hindi of Luke 3:23–38 (the text itself lists the line backwards).';
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
+    <h2 class="font-headline-md text-headline-md text-primary">Jesus' genealogy</h2>
+    <div class="flex gap-2">${[['matt','Matthew 1'],['luke','Luke 3']].map(([k,l]) => `<a href="#genealogy/${k}" class="px-3.5 py-2 rounded-full font-label-md no-underline ${tab===k?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}">${l}</a>`).join('')}</div>
+    <p class="font-body-sm text-on-surface-variant">${esc(note)} ${esc(ref || '')}</p>
+    <div class="gen-line">${list.map((n,i) => {
+      const chip = n.id && M[n.id]
+        ? `<a href="#p/${n.id}" class="px-2.5 py-1 rounded bg-secondary-container text-on-secondary-container font-label-md no-underline">${esc(n.hi)}</a>`
+        : `<span class="px-2.5 py-1 rounded bg-surface-container text-on-surface font-label-md">${esc(n.hi)}</span>`;
+      return `${i ? '<span class="gen-arrow">→</span>' : ''}${chip}`;
+    }).join('')}</div>
+  </div>`;
+}
+
+function godsView() {
+  setNav('gods');
+  const list = C.gods || [];
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
+    <h2 class="font-headline-md text-headline-md text-primary">Names of God</h2>
+    <p class="font-body-sm text-on-surface-variant">Hindi forms are taken from the IRV verse where each name or title appears.</p>
+    ${list.map(e => `<article class="bg-surface-container-low rounded-xl p-4 shadow-sm flex flex-col gap-2">
+      <div class="flex items-baseline justify-between gap-2 flex-wrap">
+        <h3 class="font-headline-sm text-headline-sm font-bold text-primary">${esc(e.hi)}</h3>
+        <span class="heb text-primary text-[20px] font-semibold">${esc(e.o)}</span>
+      </div>
+      <div class="font-label-md text-on-surface-variant">${esc(e.en)} · ${esc(e.pr)}</div>
+      <p class="font-body-md">“${esc(e.m)}”</p>
+      <div class="font-label-sm text-tertiary font-semibold">${esc(e.ref)}</div>
+      <p class="font-body-sm leading-relaxed bg-surface-container-lowest/80 rounded-lg p-3">${esc(e.v)}</p>
+    </article>`).join('')}
+  </div>`;
+}
+
+function womenView() {
+  setNav('women');
+  const list = women();
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
+    <h2 class="font-headline-md text-headline-md text-primary">Women of the Bible</h2>
+    <p class="font-body-sm text-on-surface-variant">${list.length} women in this lexicon. Tap a name to open it.</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${list.map(nameCard).join('')}</div>
+  </div>`;
+  bindClicks();
+}
+
+function makeCardCanvas(e, story) {
+  const W = 1080, H = story ? 1920 : 1080;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff8f8'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#f5eced'; ctx.fillRect(60, 60, W - 120, H - 120);
+  ctx.strokeStyle = '#dcc0ba'; ctx.lineWidth = 3; ctx.strokeRect(60, 60, W - 120, H - 120);
+  ctx.fillStyle = '#7f2c15'; ctx.fillRect(60, 60, W - 120, story ? 200 : 160);
+  ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center';
+  ctx.font = '600 44px "Noto Serif", serif';
+  ctx.fillText('Holy Names', W / 2, story ? 175 : 155);
+  const mid = story ? 820 : 480;
+  ctx.fillStyle = '#7f2c15';
+  ctx.font = '700 110px "Noto Serif Devanagari", "Noto Serif", serif';
+  ctx.fillText(shortHi(e), W / 2, mid);
+  ctx.fillStyle = '#56423d';
+  ctx.font = '600 64px "Noto Serif Hebrew", "Noto Serif Greek", "Noto Serif", serif';
+  ctx.fillText(e.o || '', W / 2, mid + 110);
+  ctx.font = '500 40px Inter, sans-serif';
+  ctx.fillText(shortEn(e), W / 2, mid + 180);
+  ctx.fillStyle = '#fff8f8';
+  const boxY = mid + 230, boxH = story ? 420 : 260;
+  roundRect(ctx, 140, boxY, W - 280, boxH, 24); ctx.fill();
+  ctx.fillStyle = '#6d3a00';
+  ctx.font = '600 28px Inter, sans-serif';
+  ctx.fillText('MEANING', W / 2, boxY + 60);
+  ctx.fillStyle = '#1e1b1c';
+  ctx.font = '600 44px "Noto Serif Devanagari", "Noto Serif", serif';
+  wrapText(ctx, '“' + e.m + '”', W / 2, boxY + 130, W - 360, 56);
+  ctx.fillStyle = '#5c623b';
+  ctx.font = '600 28px Inter, sans-serif';
+  ctx.fillText(e.ref, W / 2, boxY + boxH - 40);
+  ctx.fillStyle = '#89726c';
+  ctx.font = '400 26px Inter, sans-serif';
+  ctx.fillText('Bible Names in Hindi', W / 2, H - 100);
+  return c;
+}
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function wrapText(ctx, text, x, y, max, lh) {
+  const words = text.split(' ');
+  let line = '', yy = y;
+  for (const w of words) {
+    const t = line ? line + ' ' + w : w;
+    if (ctx.measureText(t).width > max && line) { ctx.fillText(line, x, yy); line = w; yy += lh; }
+    else line = t;
+  }
+  if (line) ctx.fillText(line, x, yy);
+}
+function canvasPng(canvas) {
+  return new Promise(res => canvas.toBlob(res, 'image/png'));
+}
+async function downloadCanvas(e, story) {
+  const blob = await canvasPng(makeCardCanvas(e, story));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = shortHi(e) + (story ? '-status' : '-card') + '.png';
+  a.click();
+}
+async function shareCanvas(e, story) {
+  const blob = await canvasPng(makeCardCanvas(e, story));
+  const file = new File([blob], shortHi(e) + '.png', { type: 'image/png' });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: e.hi, text: shareText(e) });
+      return;
+    }
+  } catch (err) {}
+  downloadCanvas(e, story);
+}
+
+function cardView(id) {
+  setNav('card');
+  const e = M[id] || M.jesus;
+  const sq = makeCardCanvas(e, false).toDataURL('image/png');
+  const st = makeCardCanvas(e, true).toDataURL('image/png');
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
+    <button type="button" class="text-primary font-label-md font-semibold self-start" onclick="history.back()">← Back</button>
+    <h2 class="font-headline-md text-headline-md text-primary">Shareable name card</h2>
+    <p class="font-body-sm text-on-surface-variant">Square (1080×1080) and status (1080×1920) cards for WhatsApp.</p>
+    <div class="card-preview"><img alt="Square card" src="${sq}"/></div>
+    <div class="flex gap-2 flex-wrap">
+      <button type="button" id="dlSq" class="flex-1 rounded-xl bg-primary text-on-primary py-3 font-label-lg font-semibold">Download square</button>
+      <button type="button" id="shSq" class="flex-1 rounded-xl bg-secondary text-on-secondary py-3 font-label-lg font-semibold">Share</button>
+    </div>
+    <div class="card-preview" style="max-width:220px"><img alt="Status card" src="${st}"/></div>
+    <button type="button" id="dlSt" class="rounded-xl bg-tertiary-container text-on-tertiary-container py-3 font-label-lg font-semibold">Download status</button>
+  </div>`;
+  document.getElementById('dlSq').onclick = () => downloadCanvas(e, false);
+  document.getElementById('shSq').onclick = () => shareCanvas(e, false);
+  document.getElementById('dlSt').onclick = () => downloadCanvas(e, true);
+}
+
+
 function route() {
   mapObj = null;
   const h = (location.hash || '#home').slice(1);
@@ -717,10 +1088,19 @@ function route() {
   if (h === 'people') return listView('p');
   if (h === 'places') return listView('l');
   if (h === 'map') return mapView();
+  if (h.startsWith('map/')) return mapView(h.split('/')[1]);
   if (h === 'meanings') { chip = 'm'; return home(); }
   if (h === 'saved') return savedView();
   if (h === 'lineage' || h.startsWith('lineage/')) return lineageView(h.split('/')[1]);
   if (h.startsWith('p/')) return detail(M[h.slice(2)]);
+  if (h === 'more') return moreView();
+  if (h === 'finder') return finderView();
+  if (h === 'quiz') return quizView();
+  if (h === 'timeline') return timelineView();
+  if (h === 'genealogy' || h.startsWith('genealogy/')) return genealogyView(h.split('/')[1]);
+  if (h === 'gods') return godsView();
+  if (h === 'women') return womenView();
+  if (h.startsWith('card/')) return cardView(h.split('/')[1]);
   if (M[h]) return detail(M[h]);
   home();
 }
@@ -746,8 +1126,9 @@ document.getElementById('btnAbout').onclick = aboutSheet;
 window.closeSheet = closeSheet;
 addEventListener('hashchange', route);
 
-fetch('names.json').then(r => r.json()).then(data => {
+Promise.all([fetch('names.json').then(r => r.json()), fetch('content.json').then(r => r.json())]).then(([data, content]) => {
   D = data;
+  C = content;
   data.forEach(e => { M[e.id] = e; });
   route();
 });
