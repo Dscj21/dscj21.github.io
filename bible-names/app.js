@@ -115,6 +115,27 @@ function addArrows(map, latlngs) {
     L.marker(mid, { icon, interactive: false, keyboard: false, zIndexOffset: 200 }).addTo(map);
   }
 }
+function shortMapName(s) {
+  let t = String(s || '').replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+  const aliases = {
+    'पिसीदिया का अन्ताकिया': 'पिसीदिया',
+    'Antioch of Pisidia': 'Pisidia',
+    'Goshen / Rameses': 'Goshen',
+    'Salamis, Cyprus': 'Salamis',
+    'मोआब के मैदान': 'मोआब',
+    'Plains of Moab': 'Moab',
+    'सीन का जंगल': 'सीन',
+    'Wilderness of Sin': 'Sin',
+    'समुद्र पार': 'समुद्र पार',
+    'Sea crossing': 'Sea crossing'
+  };
+  return aliases[t] || t;
+}
+const LABEL_SIDES = ['right','left','top','bottom','top-right','top-left','bottom-right','bottom-left'];
+function rectsOverlap(a, b, pad) {
+  pad = pad || 3;
+  return !(a.right + pad <= b.left || b.right + pad <= a.left || a.bottom + pad <= b.top || b.bottom + pad <= a.top);
+}
 function labelSides(stops) {
   const sides = stops.map((_, i) => (i % 2 ? 'left' : 'right'));
   const dist = (a, b) => Math.hypot(a.ll[0] - b.ll[0], a.ll[1] - b.ll[1]);
@@ -128,9 +149,70 @@ function labelSides(stops) {
   }
   return sides;
 }
-function placeDivIcon({ num, hi, en, side, labeled }) {
+function resolveLabels(map, items) {
+  const box = map.getContainer().getBoundingClientRect();
+  const inset = 2;
+  const inMap = r => r.left >= box.left + inset && r.right <= box.right - inset && r.top >= box.top + inset && r.bottom <= box.bottom - inset;
+  const measure = () => items.map(it => {
+    const el = it.mk.getElement && it.mk.getElement();
+    const lab = el && el.querySelector('.mk-lab');
+    const badge = el && (el.querySelector('.mk-num, .mk-pin') || el);
+    return {
+      lab: lab ? lab.getBoundingClientRect() : null,
+      badge: badge ? badge.getBoundingClientRect() : null
+    };
+  });
+  const conflicts = (i, rects) => {
+    const r = rects[i] && rects[i].lab;
+    if (!r) return true;
+    if (!inMap(r)) return true;
+    for (let j = 0; j < rects.length; j++) {
+      if (j === i) continue;
+      if (rects[j].lab && rectsOverlap(r, rects[j].lab)) return true;
+      if (rects[j].badge && rectsOverlap(r, rects[j].badge, 2)) return true;
+    }
+    return false;
+  };
+  const apply = i => {
+    const it = items[i];
+    it.mk.setIcon(placeDivIcon({ num: it.num, hi: it.hi, en: it.en, side: it.side, labeled: it.labeled, compact: it.compact }));
+  };
+  for (let pass = 0; pass < 8; pass++) {
+    let rects = measure();
+    let moved = false;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].labeled === false) continue;
+      if (!conflicts(i, rects)) continue;
+      const start = items[i].side;
+      for (const s of LABEL_SIDES) {
+        if (s === start) continue;
+        items[i].side = s;
+        apply(i);
+        rects = measure();
+        if (!conflicts(i, rects)) { moved = true; break; }
+      }
+      if (conflicts(i, rects) && !items[i].compact) {
+        items[i].compact = true;
+        apply(i);
+        rects = measure();
+        if (!conflicts(i, rects)) moved = true;
+        else {
+          for (const s of LABEL_SIDES) {
+            items[i].side = s;
+            apply(i);
+            rects = measure();
+            if (!conflicts(i, rects)) { moved = true; break; }
+          }
+        }
+      }
+      if (conflicts(i, rects)) { items[i].side = start; apply(i); }
+    }
+    if (!moved) break;
+  }
+}
+function placeDivIcon({ num, hi, en, side, labeled, compact }) {
   const badge = num != null ? `<span class="mk-num">${num}</span>` : `<span class="mk-pin"></span>`;
-  const lab = labeled === false ? '' : `<div class="mk-lab"><b>${esc(hi)}</b><span>${esc(en)}</span></div>`;
+  const lab = labeled === false ? '' : `<div class="mk-lab${compact ? ' wrap' : ''}"><b>${esc(hi)}</b><span>${esc(en)}</span></div>`;
   return L.divIcon({
     className: 'bn-marker',
     html: `<div class="mk lab-${side || 'right'}">${badge}${lab}</div>`,
@@ -177,11 +259,12 @@ function toast(msg) {
 }
 
 function openSheet(html) {
+  if (window.Ads && Ads.suspend) Ads.suspend();
   sheetEl.classList.remove('hidden');
   sheetEl.querySelector('.sheet-card').innerHTML = html;
   sheetEl.querySelector('.sheet-bg').onclick = closeSheet;
 }
-function closeSheet() { sheetEl.classList.add('hidden'); }
+function closeSheet() { sheetEl.classList.add('hidden'); if (window.Ads && Ads.resume) Ads.resume(); }
 
 function verseSheet(e) {
   openSheet(`
@@ -757,30 +840,32 @@ function mapView(journeyId) {
       addArrows(m, latlngs);
       const sides = labelSides(j.stops);
       const stopMarks = j.stops.map((s, i) => {
+        const hi = shortMapName(s.hi), en = shortMapName(s.n);
         const mk = L.marker(s.ll, {
-          icon: placeDivIcon({ num: i + 1, hi: s.hi, en: s.n, side: sides[i] }),
+          icon: placeDivIcon({ num: i + 1, hi, en, side: sides[i] }),
           zIndexOffset: 400 + i
         }).addTo(m).bindPopup(`<strong>${i + 1}. ${esc(s.hi)}</strong><br>${esc(s.n)}`);
-        return { mk, ll: s.ll };
+        return { mk, ll: s.ll, num: i + 1, hi, en, side: sides[i] };
       });
-      m.fitBounds(line.getBounds().pad(0.28));
-      const spreadStops = () => {
+      m.fitBounds(line.getBounds(), { padding: [40, 48] });
+      const layoutStops = () => {
         const pts = stopMarks.map(it => m.latLngToLayerPoint(it.ll));
         for (let i = 0; i < pts.length; i++) {
           for (let k = i + 1; k < pts.length; k++) {
             const dx = pts[k].x - pts[i].x, dy = pts[k].y - pts[i].y;
             const d = Math.hypot(dx, dy) || 0.1;
-            if (d < 36) {
-              const push = (36 - d) / 2, ux = dx / d, uy = dy / d;
+            if (d < 40) {
+              const push = (40 - d) / 2, ux = dx / d, uy = dy / d;
               pts[i] = L.point(pts[i].x - ux * push, pts[i].y - uy * push);
               pts[k] = L.point(pts[k].x + ux * push, pts[k].y + uy * push);
             }
           }
         }
         stopMarks.forEach((it, i) => it.mk.setLatLng(m.layerPointToLatLng(pts[i])));
+        resolveLabels(m, stopMarks);
       };
-      spreadStops();
-      m.on('zoomend', spreadStops);
+      layoutStops();
+      m.on('zoomend', layoutStops);
       if (legend) legend.innerHTML = `
         <div class="leg-item"><span class="leg-num">1</span> Stop (Hindi + English)</div>
         <div class="leg-item"><span class="leg-line"></span> Route</div>
@@ -824,7 +909,10 @@ function mapView(journeyId) {
       const start = M.jerusalem && M.jerusalem.ll ? M.jerusalem : list.find(x => x.ll);
       if (start) select(start);
     }
-    setTimeout(() => m.invalidateSize(), 80);
+    setTimeout(() => {
+      m.invalidateSize();
+      if (j) m.fire('zoomend');
+    }, 120);
   };
   go();
 }

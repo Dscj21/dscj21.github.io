@@ -1,0 +1,17 @@
+{
+  "_note": "Same AdMob publisher and banner unit as Hebrew Greek Hindi Bible. The web page hides the banner slot; a future Capacitor Android wrap uses @capacitor-community/admob. androidDebug IDs are Google's public test units. Do not click your own live ads.",
+  "enabled": true,
+  "web": { "adsenseClient": "", "bannerSlot": "" },
+  "android": {
+    "admobAppId": "ca-app-pub-5235855521275178~1066678732",
+    "bannerId": "ca-app-pub-5235855521275178/4814352057",
+    "testing": false,
+    "testingDevices": []
+  },
+  "androidDebug": {
+    "admobAppId": "ca-app-pub-3940256099942544~3347511713",
+    "bannerId": "ca-app-pub-3940256099942544/6300978111",
+    "testing": true,
+    "testingDevices": []
+  }
+}

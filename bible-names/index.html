@@ -50,7 +50,7 @@ fontSize: {
   "body-sm": ["12px", { "lineHeight": "18px", "fontWeight": "400" }]
 } } } };
 </script>
-<link rel="stylesheet" href="style.css"/>
+<link rel="stylesheet" href="style.css?v=7"/>
 </head>
 <body class="bg-surface font-body-md text-on-surface antialiased">
 <header class="fixed top-0 w-full z-50 pt-safe bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
@@ -106,9 +106,13 @@ fontSize: {
   </div>
 </nav>
 
+<div id="adbar" class="ad-banner" hidden aria-hidden="true"></div>
+
+
 <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true"><div class="sheet-bg"></div><div class="sheet-card"></div></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
-<script src="app.js" defer></script>
+<script src="app.js?v=7" defer></script>
+<script src="ads.js?v=7" defer></script>
 </body>
 </html>

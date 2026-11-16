@@ -38,11 +38,11 @@
 .tree-branch-row{display:flex;flex-wrap:nowrap;justify-content:center;align-items:flex-start;gap:4px;width:max-content;min-width:100%;
   border-top:2px solid #dcc0ba;padding-top:14px;margin-top:2px}
 .tree-node{
-  display:flex;align-items:center;gap:6px;
-  background:#fbf1f2;border:1px solid #e3d8c8;border-radius:8px;
-  padding:6px 8px 6px 6px;text-align:left;cursor:pointer;position:relative;
-  min-width:108px;max-width:132px;box-shadow:0 1px 3px rgba(158,67,42,.04);
-  box-sizing:border-box;overflow:visible;
+  display:flex;align-items:center;gap:4px;
+  background:#fbf1f2;border:1px solid #e3d8c8;border-radius:6px;
+  padding:4px 5px 4px 3px;text-align:left;cursor:pointer;position:relative;
+  min-width:72px;max-width:96px;box-shadow:0 1px 3px rgba(158,67,42,.04);
+  box-sizing:border-box;overflow:hidden;
 }
 .tree-node .dot{position:absolute;left:10px;top:50%;transform:translateY(-50%);
   width:8px;height:8px;border-radius:50%;background:#9e432a}
@@ -50,8 +50,8 @@
 .tree-node.me{background:#9e432a;border-color:#7f2c15;color:#fff}
 .tree-node.me .dot{background:#ffd0ac}
 .tree-node.me .tn-en{color:#ffcfc3}
-.tn-hi{display:block;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:600;font-size:13px;line-height:1.25}
-.tn-en{display:block;font-size:11px;color:#56423d;margin-top:1px}
+.tn-hi{display:block;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:600;font-size:11px;line-height:1.2}
+.tn-en{display:block;font-size:9px;color:#56423d;margin-top:0}
 
 #mapel{height:260px;width:100%;border-radius:12px;overflow:hidden;z-index:0}
 .place-hero{height:144px;background-size:cover;background-position:center;position:relative}
@@ -70,7 +70,7 @@
 .tn-hi{word-break:break-word}
 
 .tree-scroll{overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch}
-.tree{width:max-content;min-width:100%;margin:0}
+.tree{width:100%;min-width:100%;margin:0;max-width:100%}
 
 .tn-hi,.tn-en{white-space:normal;overflow-wrap:break-word;word-break:break-word}
 
@@ -79,19 +79,19 @@
 .tree-scroll::-webkit-scrollbar-track{background:transparent}
 
 /* Gender */
-.g-icon{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;flex-shrink:0}
+.g-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;flex-shrink:0}
 .g-icon svg{width:12px;height:12px;display:block}
 .g-m{background:#dbeafe;color:#1d4ed8}
 .g-f{background:#fce7f3;color:#be185d}
 .g-d{background:#ffedd5;color:#9e432a}
 .tree-node .dot{display:none}
-.tree-node .g-icon{position:static;transform:none;width:18px;height:18px;flex-shrink:0}
-.tree-node .g-icon svg{width:12px;height:12px}
+.tree-node .g-icon{position:static;transform:none;width:14px;height:14px;flex-shrink:0}
+.tree-node .g-icon svg{width:10px;height:10px}
 .tn-text{min-width:0;flex:1;display:block}
 
 /* Couples: person ♥ spouse, never stacked as parent-child */
 .couple{display:flex;align-items:center;justify-content:center;gap:3px;flex-wrap:nowrap}
-.couple-heart{color:#9e432a;font-size:13px;line-height:1;flex-shrink:0;padding:0 1px}
+.couple-heart{color:#9e432a;font-size:10px;line-height:1;flex-shrink:0;padding:0}
 .couple-col{display:flex;flex-direction:column;align-items:center}
 
 /* Explore tiles, quiz, timeline, genealogy */
@@ -126,27 +126,30 @@
 .tree-scroll-note[hidden]{display:none}
 
 /* Spouses share one row with the husband; children drop under each mother */
-.couple-block{display:flex;flex-direction:column;align-items:center;width:max-content}
+.couple-block{display:flex;flex-direction:column;align-items:center;width:100%;max-width:100%}
 .from-joint{display:flex;flex-direction:column;align-items:center;width:100%}
 .joint-bar{height:2px;width:70%;max-width:120px;background:#dcc0ba;margin:2px auto 0}
-.union{display:flex;flex-direction:column;width:max-content}
+.union{display:flex;flex-direction:column;width:100%;max-width:100%}
 .union-spouses,.union-kids{
   display:grid;
-  grid-template-columns:auto repeat(var(--wives), auto);
-  column-gap:12px;
+  grid-template-columns:minmax(0,1fr) repeat(var(--wives), minmax(0,1fr));
+  column-gap:2px;
   align-items:center;
-  justify-items:center;
+  justify-items:stretch;
+  width:100%;
 }
 .union-spouses{position:relative}
 .union-spouses::before{
-  content:"";position:absolute;left:40px;right:16px;top:50%;height:2px;background:#dcc0ba;z-index:0
+  content:"";position:absolute;left:10px;right:8px;top:50%;height:2px;background:#dcc0ba;z-index:0
 }
 .union-spouses > *{position:relative;z-index:1}
 .union-kids{align-items:start}
-.u-unit{display:flex;align-items:center;justify-content:center;gap:4px;min-width:108px}
-.union-kids .u-unit{flex-direction:column;align-items:center}
-.u-pad{min-width:108px}
-.leftover-kids{display:flex;gap:8px;justify-content:center;margin-top:8px}
+.u-self,.u-unit{min-width:0;width:100%;display:flex;align-items:center;justify-content:center;gap:1px}
+.union-kids .u-unit{flex-direction:column;align-items:stretch}
+.u-pad{min-width:0}
+.union .tree-node{width:100%;max-width:none;min-width:0;padding:3px 3px 3px 2px;gap:2px}
+.union .wife-kids{width:100%;min-width:0}
+.leftover-kids{display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap}
 
 /* Maps: light English basemap + our Hindi/English markers */
 #mapel.map-lg{height:360px}
@@ -165,16 +168,21 @@
   display:block;margin:3px
 }
 .mk-lab{
-  position:absolute;left:32px;top:-2px;
-  background:rgba(255,248,248,.96);border:1px solid #e3d8c8;border-radius:6px;
-  padding:2px 7px 3px;white-space:nowrap;
+  position:absolute;left:30px;top:-1px;
+  background:rgba(255,248,248,.96);border:1px solid #e3d8c8;border-radius:5px;
+  padding:1px 5px 2px;white-space:nowrap;
   box-shadow:0 1px 3px rgba(35,31,32,.14);pointer-events:none;z-index:2
 }
-.mk-lab b{display:block;font-size:12px;line-height:1.2;color:#7f2c15;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:700}
-.mk-lab span{display:block;font-size:10px;line-height:1.2;color:#56423d}
-.mk.lab-left .mk-lab{left:auto;right:32px}
-.mk.lab-top .mk-lab{left:50%;right:auto;top:auto;bottom:30px;transform:translateX(-50%)}
-.mk.lab-bottom .mk-lab{left:50%;right:auto;top:30px;transform:translateX(-50%)}
+.mk-lab b{display:block;font-size:10px;line-height:1.15;color:#7f2c15;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:700}
+.mk-lab span{display:block;font-size:8px;line-height:1.15;color:#56423d}
+.mk.lab-left .mk-lab{left:auto;right:30px}
+.mk.lab-top .mk-lab{left:50%;right:auto;top:auto;bottom:28px;transform:translateX(-50%)}
+.mk.lab-bottom .mk-lab{left:50%;right:auto;top:28px;transform:translateX(-50%)}
+.mk.lab-top-right .mk-lab{left:24px;right:auto;top:auto;bottom:26px;transform:none}
+.mk.lab-top-left .mk-lab{left:auto;right:24px;top:auto;bottom:26px;transform:none}
+.mk.lab-bottom-right .mk-lab{left:24px;top:26px;transform:none}
+.mk.lab-bottom-left .mk-lab{left:auto;right:24px;top:26px;transform:none}
+.mk-lab.wrap{white-space:normal;max-width:70px;line-height:1.1;text-align:center}
 .route-arrow{background:none !important;border:none !important}
 .route-arrow div{
   width:0;height:0;
@@ -200,3 +208,13 @@
 }
 .leg-note{width:100%;margin:0;color:#89726c;font-size:11px}
 .map-legend .mk-pin{width:12px;height:12px;margin:0;flex-shrink:0}
+
+/* AdMob banner slot: hidden on the website; reserved on a future Capacitor Android wrap */
+.ad-banner{display:none;height:0;overflow:hidden}
+html.has-native-banner{--adh:50px}
+html.has-native-banner .ad-banner{
+  display:block;position:fixed;left:0;right:0;z-index:40;
+  bottom:calc(4rem + env(safe-area-inset-bottom,0px));
+  height:var(--adh,50px);background:transparent;pointer-events:none
+}
+html.has-native-banner main#app{padding-bottom:calc(6rem + var(--adh,50px) + env(safe-area-inset-bottom,0px))}
