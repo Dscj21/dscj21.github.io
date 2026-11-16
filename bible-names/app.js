@@ -76,13 +76,68 @@ function dayEntry() {
   return D[Math.floor(Date.now() / 864e5) % D.length];
 }
 
-function osmTile(lat, lon, z) {
+const MAP_ATTR = 'Tiles © Esri · © OpenStreetMap contributors';
+function mapTile(lat, lon, z) {
   z = z || 11;
   const n = 2 ** z;
   const x = Math.floor((lon + 180) / 360 * n);
   const latRad = lat * Math.PI / 180;
   const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
-  return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+  return `https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`;
+}
+function addBaseMap(map) {
+  L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: MAP_ATTR, maxZoom: 16, maxNativeZoom: 16
+  }).addTo(map);
+  L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 10, maxNativeZoom: 10, opacity: 0.9
+  }).addTo(map);
+}
+function bearing(a, b) {
+  const lat1 = a[0] * Math.PI / 180, lat2 = b[0] * Math.PI / 180;
+  const dLon = (b[1] - a[1]) * Math.PI / 180;
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+function addArrows(map, latlngs) {
+  for (let i = 0; i < latlngs.length - 1; i++) {
+    const a = latlngs[i], b = latlngs[i + 1];
+    const mid = [a[0] + (b[0] - a[0]) * 0.45, a[1] + (b[1] - a[1]) * 0.45];
+    if (latlngs.some(p => Math.hypot(p[0] - mid[0], p[1] - mid[1]) < 1)) continue;
+    const ang = bearing(a, b);
+    const icon = L.divIcon({
+      className: 'route-arrow',
+      html: `<div style="transform:rotate(${ang}deg)"></div>`,
+      iconSize: [18, 18],
+      iconAnchor: [9, 9]
+    });
+    L.marker(mid, { icon, interactive: false, keyboard: false, zIndexOffset: 200 }).addTo(map);
+  }
+}
+function labelSides(stops) {
+  const sides = stops.map((_, i) => (i % 2 ? 'left' : 'right'));
+  const dist = (a, b) => Math.hypot(a.ll[0] - b.ll[0], a.ll[1] - b.ll[1]);
+  for (let i = 0; i < stops.length; i++) {
+    for (let j = i + 1; j < stops.length; j++) {
+      if (dist(stops[i], stops[j]) < 1.2) {
+        if (stops[i].ll[0] >= stops[j].ll[0]) { sides[i] = 'top'; sides[j] = 'bottom'; }
+        else { sides[i] = 'bottom'; sides[j] = 'top'; }
+      }
+    }
+  }
+  return sides;
+}
+function placeDivIcon({ num, hi, en, side, labeled }) {
+  const badge = num != null ? `<span class="mk-num">${num}</span>` : `<span class="mk-pin"></span>`;
+  const lab = labeled === false ? '' : `<div class="mk-lab"><b>${esc(hi)}</b><span>${esc(en)}</span></div>`;
+  return L.divIcon({
+    className: 'bn-marker',
+    html: `<div class="mk lab-${side || 'right'}">${badge}${lab}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16]
+  });
 }
 
 function speak(e, lang, btn) {
@@ -204,7 +259,7 @@ function nameCard(e) {
 
 function placeCard(e) {
   const [lat, lon] = e.ll || [0, 0];
-  const bg = e.ll ? `background-image:url('${osmTile(lat, lon, 12)}')` : 'background:#5c623b';
+  const bg = e.ll ? `background-image:url('${mapTile(lat, lon, 12)}')` : 'background:#5c623b';
   return `<article class="bg-surface-container-low rounded-xl overflow-hidden shadow-sm flex flex-col cursor-pointer" data-open="${e.id}">
     <div class="place-hero w-full" style="${bg}">
       <div class="absolute inset-0 bg-gradient-to-t from-inverse-surface/85 via-inverse-surface/30 to-transparent"></div>
@@ -540,9 +595,14 @@ function detail(e) {
   if (e.ll) {
     const go = () => {
       if (!window.L) return setTimeout(go, 200);
-      const m = L.map('mapel').setView(e.ll, 8);
-      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(m);
-      L.marker(e.ll).addTo(m).bindPopup(e.hi).openPopup();
+      const m = L.map('mapel', { scrollWheelZoom: false }).setView(e.ll, 10);
+      m.attributionControl.setPrefix('Leaflet');
+      addBaseMap(m);
+      L.marker(e.ll, { icon: placeDivIcon({ hi: e.hi, en: shortEn(e), side: 'right' }), zIndexOffset: 400 })
+        .addTo(m)
+        .bindPopup(`<strong>${esc(e.hi)}</strong><br>${esc(shortEn(e))}`)
+        .openPopup();
+      setTimeout(() => m.invalidateSize(), 80);
     };
     go();
   }
@@ -564,29 +624,25 @@ function coupleRow(a, b, aKind, bKind) {
   return `<div class="couple">${treeNode(a, aKind)}<span class="couple-heart" aria-hidden="true">♥</span>${treeNode(b, bKind || '')}</div>`;
 }
 
-// A married child is shown with their one spouse; their children hang below as names only.
-// Never expand a descendant's other wives (so Jacob's family does not appear on Isaac's tree).
-function descendantBlock(id) {
-  const k = M[id];
-  if (!k) return '';
-  const partners = coParents(id);
-  const primary = partners.length === 1 ? partners[0] : null;
-  let html = `<div class="tree-branch">`;
-  html += primary ? coupleRow(id, primary) : treeNode(id);
-  if (primary) {
-    const kids = kidsWith(id, primary);
-    if (kids.length) html += `<div class="tree-line"></div><div class="wife-kids">${kids.map(x => treeNode(x.id)).join('')}</div>`;
-  }
-  html += '</div>';
-  return html;
+// Preferred wife order for well-known families (wives stay on one row with the husband).
+function preferredPartners(id) {
+  const raw = coParents(id);
+  const PREFERRED = {
+    abraham: ['sarah', 'hagar', 'keturah'],
+    jacob: ['leah', 'rachel', 'bilhah', 'zilpah'],
+    david: ['michal', 'ahinoam', 'abigail', 'maacah', 'haggith', 'bathsheba']
+  };
+  const pref = PREFERRED[id];
+  if (!pref) return raw;
+  const set = new Set(raw);
+  return pref.filter(x => set.has(x)).concat(raw.filter(x => !pref.includes(x)));
 }
 
 function renderTree(rootId) {
   const e = M[rootId];
   if (!e) return '<p class="text-on-surface-variant">No family links for this name yet.</p>';
   const fa = (e.father || [])[0], mo = (e.mother || [])[0];
-  const sibs = fullSiblings(rootId);
-  const partners = coParents(rootId);
+  const partners = preferredPartners(rootId);
   const grouped = new Set();
   partners.forEach(p => kidsWith(rootId, p).forEach(k => grouped.add(k.id)));
   const leftover = kidsOf(rootId).filter(k => !grouped.has(k.id));
@@ -594,25 +650,41 @@ function renderTree(rootId) {
   if (fa || mo) {
     html += `<div class="tree-row">${coupleRow(fa, mo)}</div><div class="tree-line"></div>`;
   }
-  if (partners.length <= 1) {
-    html += `<div class="tree-row"><div class="couple-col">`;
-    html += partners[0] ? coupleRow(rootId, partners[0], 'me') : treeNode(rootId, 'me');
-    const kids = partners[0] ? kidsWith(rootId, partners[0]) : leftover;
-    if (kids.length) {
-      html += `<div class="tree-line"></div><div class="tree-row">${kids.map(k => descendantBlock(k.id)).join('')}</div>`;
+  if (partners.length === 0) {
+    html += treeNode(rootId, 'me');
+    if (leftover.length) {
+      html += `<div class="from-joint"><div class="tree-line"></div><div class="tree-row">${leftover.map(k => treeNode(k.id)).join('')}</div></div>`;
     }
-    html += `</div>${sibs.map(id => treeNode(id, 'side')).join('')}</div>`;
+  } else if (partners.length === 1) {
+    const kids = kidsWith(rootId, partners[0]).concat(leftover);
+    html += `<div class="couple-block">`;
+    html += coupleRow(rootId, partners[0], 'me', '');
+    if (kids.length) {
+      html += `<div class="from-joint"><div class="joint-bar"></div><div class="tree-line"></div><div class="tree-row">${kids.map(k => treeNode(k.id)).join('')}</div></div>`;
+    }
+    html += `</div>`;
   } else {
-    html += `<div class="tree-row">${treeNode(rootId, 'me')}${sibs.map(id => treeNode(id, 'side')).join('')}</div>`;
-    html += `<div class="tree-line"></div><div class="tree-branch-row">`;
+    html += `<div class="union" style="--wives:${partners.length}">`;
+    html += `<div class="union-spouses">`;
+    html += `<div class="u-self">${treeNode(rootId, 'me')}</div>`;
+    for (const p of partners) {
+      html += `<div class="u-unit"><span class="couple-heart" aria-hidden="true">♥</span>${treeNode(p)}</div>`;
+    }
+    html += `</div>`;
+    html += `<div class="union-kids">`;
+    html += `<div class="u-self u-pad"></div>`;
     for (const p of partners) {
       const kids = kidsWith(rootId, p);
-      html += `<div class="wife-col"><div class="couple"><span class="couple-heart">♥</span>${treeNode(p)}</div>`;
-      if (kids.length) html += `<div class="tree-line"></div><div class="wife-kids">${kids.map(k => descendantBlock(k.id)).join('')}</div>`;
+      html += `<div class="u-unit">`;
+      if (kids.length) {
+        html += `<div class="from-joint"><div class="joint-bar"></div><div class="tree-line"></div>`;
+        html += `<div class="wife-kids">${kids.map(k => treeNode(k.id)).join('')}</div></div>`;
+      }
       html += `</div>`;
     }
+    html += `</div>`;
     if (leftover.length) {
-      html += `<div class="wife-col"><div class="tree-line"></div><div class="wife-kids">${leftover.map(k => descendantBlock(k.id)).join('')}</div></div>`;
+      html += `<div class="leftover-kids">${leftover.map(k => treeNode(k.id)).join('')}</div>`;
     }
     html += `</div>`;
   }
@@ -626,7 +698,7 @@ function lineageView(rootId) {
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <div class="px-1">
       <h2 class="font-headline-md text-headline-md text-primary">Biblical Family Tree</h2>
-      <p class="font-body-sm text-body-sm text-on-surface-variant">Each couple stands side by side (♥). Children appear under that couple, never as a spouse.</p>
+      <p class="font-body-sm text-body-sm text-on-surface-variant">The husband and his wives stand on one row (♥). Children appear under their own mother.</p>
     </div>
     <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
       ${TREES.map(t => `<button type="button" data-tree="${t.id}" class="flex-shrink-0 px-3.5 py-2 rounded-full font-label-md text-label-md ${t.id === root ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface-container text-on-surface-variant'}">${esc(M[t.id] ? M[t.id].hi : t.label)}</button>`).join('')}
@@ -665,7 +737,8 @@ function mapView(journeyId) {
     <h2 class="font-headline-md text-headline-md text-primary">${j ? esc(j.hi) : 'Holy Places &amp; Cities'}</h2>
     <div class="flex gap-2 overflow-x-auto no-scrollbar">${tabs.map(([id,lab]) => `<a href="${id?'#map/'+id:'#map'}" class="flex-shrink-0 px-3.5 py-2 rounded-full font-label-md no-underline ${(!j && !id) || (j && j.id===id)?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}">${lab}</a>`).join('')}</div>
     ${j && j.approx ? '<p class="font-body-sm text-on-surface-variant">Approximate / traditional route. The exact path is debated.</p>' : (j ? `<p class="font-body-sm text-on-surface-variant">${esc(j.note||'')}</p>` : '')}
-    <div id="mapel" class="shadow-sm"></div>
+    <div id="mapel" class="map-lg shadow-sm"></div>
+    <div class="map-legend" id="mapLegend"></div>
     <div id="placeInfo"></div>
     ${j ? `<ol class="font-body-md list-decimal ps-5">${j.stops.map(s=>`<li class="mb-1"><strong>${esc(s.hi)}</strong> <span class="text-on-surface-variant">(${esc(s.n)})</span></li>`).join('')}</ol>` : `<div class="grid grid-cols-1 gap-3.5">${list.map(placeCard).join('')}</div>`}
   </div>`;
@@ -673,21 +746,59 @@ function mapView(journeyId) {
   const go = () => {
     if (!window.L) return setTimeout(go, 200);
     if (mapObj) { try { mapObj.remove(); } catch (err) {} mapObj = null; }
-    const m = L.map('mapel');
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(m);
+    const m = L.map('mapel', { scrollWheelZoom: true });
+    m.attributionControl.setPrefix('Leaflet');
+    addBaseMap(m);
     mapObj = m;
+    const legend = document.getElementById('mapLegend');
     if (j) {
       const latlngs = j.stops.map(s => s.ll);
-      const line = L.polyline(latlngs, { color: '#9e432a', weight: 4, opacity: 0.85 }).addTo(m);
-      j.stops.forEach((s, i) => L.marker(s.ll).addTo(m).bindPopup((i+1)+'. '+s.hi+' ('+s.n+')'));
-      m.fitBounds(line.getBounds().pad(0.2));
+      const line = L.polyline(latlngs, { color: '#9e432a', weight: 4, opacity: 0.9 }).addTo(m);
+      addArrows(m, latlngs);
+      const sides = labelSides(j.stops);
+      const stopMarks = j.stops.map((s, i) => {
+        const mk = L.marker(s.ll, {
+          icon: placeDivIcon({ num: i + 1, hi: s.hi, en: s.n, side: sides[i] }),
+          zIndexOffset: 400 + i
+        }).addTo(m).bindPopup(`<strong>${i + 1}. ${esc(s.hi)}</strong><br>${esc(s.n)}`);
+        return { mk, ll: s.ll };
+      });
+      m.fitBounds(line.getBounds().pad(0.28));
+      const spreadStops = () => {
+        const pts = stopMarks.map(it => m.latLngToLayerPoint(it.ll));
+        for (let i = 0; i < pts.length; i++) {
+          for (let k = i + 1; k < pts.length; k++) {
+            const dx = pts[k].x - pts[i].x, dy = pts[k].y - pts[i].y;
+            const d = Math.hypot(dx, dy) || 0.1;
+            if (d < 36) {
+              const push = (36 - d) / 2, ux = dx / d, uy = dy / d;
+              pts[i] = L.point(pts[i].x - ux * push, pts[i].y - uy * push);
+              pts[k] = L.point(pts[k].x + ux * push, pts[k].y + uy * push);
+            }
+          }
+        }
+        stopMarks.forEach((it, i) => it.mk.setLatLng(m.layerPointToLatLng(pts[i])));
+      };
+      spreadStops();
+      m.on('zoomend', spreadStops);
+      if (legend) legend.innerHTML = `
+        <div class="leg-item"><span class="leg-num">1</span> Stop (Hindi + English)</div>
+        <div class="leg-item"><span class="leg-line"></span> Route</div>
+        <div class="leg-item"><span class="leg-arrow"></span> Direction of travel</div>
+        ${j.approx ? '<p class="leg-note">Approximate / traditional route. The exact path is debated.</p>' : ''}`;
       const info = document.getElementById('placeInfo');
-      if (info) info.innerHTML = `<p class="font-body-sm text-on-surface-variant">${esc(j.note||'')}${j.approx?' This map is labelled approximate.':''}</p>`;
+      if (info) info.innerHTML = '';
     } else {
-      m.setView([31.7, 35.2], 6);
       const info = document.getElementById('placeInfo');
+      const markers = {};
+      const setLabel = (id, on) => {
+        const e = M[id];
+        if (!e || !markers[id]) return;
+        markers[id].setIcon(placeDivIcon({ hi: e.hi, en: shortEn(e), side: 'right', labeled: on }));
+      };
       const select = e => {
-        m.setView(e.ll, 9);
+        Object.keys(markers).forEach(id => setLabel(id, id === e.id));
+        m.setView(e.ll, 10);
         info.innerHTML = `<div class="bg-surface-container-low rounded-xl p-4 shadow-sm">
           <div class="flex items-baseline gap-2">
             <h3 class="font-headline-sm text-headline-sm font-bold text-primary">${esc(e.hi)}</h3>
@@ -699,9 +810,21 @@ function mapView(journeyId) {
           <a href="#p/${e.id}" class="inline-block mt-2 font-label-md text-primary font-semibold">View in Detail →</a>
         </div>`;
       };
-      list.forEach(e => { if (e.ll) L.marker(e.ll).addTo(m).bindPopup(e.hi).on('click', () => select(e)); });
-      if (list[0]) select(list[0]);
+      list.forEach(e => {
+        if (!e.ll) return;
+        const mk = L.marker(e.ll, {
+          icon: placeDivIcon({ hi: e.hi, en: shortEn(e), side: 'right', labeled: false }),
+          zIndexOffset: 300
+        }).addTo(m).bindPopup(`<strong>${esc(e.hi)}</strong><br>${esc(shortEn(e))}`).on('click', () => select(e));
+        markers[e.id] = mk;
+      });
+      if (legend) legend.innerHTML = `
+        <div class="leg-item"><span class="mk-pin"></span> Bible place (Hindi + English)</div>
+        <p class="leg-note">Tap a pin for the Hindi and English name. Map labels are in English.</p>`;
+      const start = M.jerusalem && M.jerusalem.ll ? M.jerusalem : list.find(x => x.ll);
+      if (start) select(start);
     }
+    setTimeout(() => m.invalidateSize(), 80);
   };
   go();
 }
