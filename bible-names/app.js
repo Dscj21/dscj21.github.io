@@ -275,12 +275,41 @@ function verseSheet(e) {
     <button class="mt-4 text-primary font-label-md font-semibold" onclick="closeSheet();location.hash='p/${esc(e.id)}'">View name →</button>`);
 }
 
+
+const YT_CHANNELS = [
+  ['https://www.youtube.com/@BlueSparrowSpiritual', 'Watch on YouTube', 'Blue Sparrow Spiritual', 'ytm'],
+  ['https://www.youtube.com/@BlueSparrowKids', 'For Kids', 'Blue Sparrow Kids', 'ytk']
+];
+function chHandle(u) { return (String(u).match(/@[\w.-]+/) || [''])[0]; }
+function openExt(url) {
+  if (!url) return;
+  const L = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AppLauncher;
+  if (L && L.openUrl) L.openUrl({ url }).catch(() => window.open(url, '_blank', 'noopener'));
+  else window.open(url, '_blank', 'noopener');
+}
+function channelsHTML() {
+  return `<div class="chlist">${YT_CHANNELS.map(([u, title, sub, cls]) =>
+    `<button type="button" class="chcard ${cls}" data-yt="${esc(u)}">
+      <span class="yi" aria-hidden="true"><span class="material-symbols-outlined">play_arrow</span></span>
+      <span class="m"><b>${esc(title)}</b><small>${esc(sub)}</small><em>${esc(chHandle(u))}</em></span>
+      <span class="material-symbols-outlined ch-chev">chevron_right</span>
+    </button>`).join('')}</div>`;
+}
+function channelsSection() {
+  return `<section class="flex flex-col gap-3 yt-channels">
+    <div class="px-1"><h3 class="font-headline-sm text-headline-sm font-semibold">Our channels</h3></div>
+    ${channelsHTML()}
+  </section>`;
+}
+
 function aboutSheet() {
   openSheet(`
     <button class="text-primary font-label-md mb-2" onclick="closeSheet()">Close</button>
     <h2 class="font-headline-md text-headline-md text-primary mb-2">Holy Names</h2>
     <p class="font-body-md text-body-md text-on-surface-variant">A lexicon of Bible names and places for Hindi-speaking Christians. Each entry shows the IRV Hindi spelling, the original Hebrew or Greek, a Devanagari pronunciation, and a simple Hindi meaning.</p>
-    <p class="font-body-sm text-body-sm text-on-surface-variant mt-3">${D.length} entries · Strong's lexicon (public domain) · IRV Hindi Bible</p>`);
+    <p class="font-body-sm text-body-sm text-on-surface-variant mt-3">${D.length} entries · Strong's lexicon (public domain) · IRV Hindi Bible</p>
+    <div class="gt-yt font-label-sm font-semibold mt-4 mb-2">Our channels</div>
+    ${channelsHTML()}`);
 }
 
 function setNav(path) {
@@ -478,7 +507,8 @@ function home() {
           </div>
         </div>
       </section>
-      ${exploreTiles()}`;
+      ${exploreTiles()}
+      ${channelsSection()}`;
   }
 
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-lg">
@@ -999,6 +1029,7 @@ function moreView() {
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <h2 class="font-headline-md text-headline-md text-primary px-1">Explore</h2>
     ${exploreTiles()}
+    ${channelsSection()}
   </div>`;
 }
 
@@ -1351,6 +1382,13 @@ document.getElementById('btnSaved').onclick = () => { location.hash = 'saved'; }
 document.getElementById('btnAbout').onclick = aboutSheet;
 
 window.closeSheet = closeSheet;
+document.addEventListener('click', ev => {
+  const y = ev.target.closest('[data-yt]');
+  if (!y) return;
+  ev.preventDefault();
+  openExt(y.dataset.yt);
+});
+
 addEventListener('hashchange', route);
 
 Promise.all([fetch('names.json').then(r => r.json()), fetch('content.json').then(r => r.json())]).then(([data, content]) => {

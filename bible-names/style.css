@@ -218,3 +218,18 @@ html.has-native-banner .ad-banner{
   height:var(--adh,50px);background:transparent;pointer-events:none
 }
 html.has-native-banner main#app{padding-bottom:calc(6rem + var(--adh,50px) + env(safe-area-inset-bottom,0px))}
+
+/* Our YouTube channels (same wording as the Bible app) */
+.chlist{display:grid;gap:10px}
+.chcard{display:flex;align-items:center;gap:14px;width:100%;text-align:left;border:0;font:inherit;color:#1e1b1c;background:#fbf1f2;border-radius:12px;box-shadow:0 1px 3px rgba(158,67,42,.06);padding:14px 16px;cursor:pointer}
+.chcard:active{transform:scale(.98)}
+.chcard .yi{flex:none;width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:#fff;background:#e62117}
+.chcard.ytk .yi{background:linear-gradient(135deg,#f59e0b,#ec4899 55%,#8b5cf6)}
+.chcard .yi .material-symbols-outlined{font-size:26px;font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24}
+.chcard .m{flex:1;display:flex;flex-direction:column;min-width:0}
+.chcard .m b{font-size:16px;line-height:1.25;font-weight:600;color:#7f2c15;font-family:"Noto Serif","Noto Serif Devanagari",serif}
+.chcard .m small{color:#56423d;font-size:13px;margin-top:2px}
+.chcard .m em{font-style:normal;color:#89726c;font-size:12px;margin-top:1px}
+.chcard .ch-chev{color:#89726c;flex-shrink:0}
+.sheet-card .chcard{box-shadow:none;background:#f5eced}
+.gt-yt{color:#7f2c15}
