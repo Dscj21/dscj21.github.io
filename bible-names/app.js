@@ -553,8 +553,7 @@ function treeNode(id, kind) {
   if (!e) return '';
   return `<button type="button" class="tree-node ${kind || ''}" onclick="location.hash='p/${id}'">
     ${genderIcon(e.g)}
-    <span class="tn-hi">${esc(shortHi(e))}</span>
-    <span class="tn-en">${esc(shortEn(e))}</span>
+    <span class="tn-text"><span class="tn-hi">${esc(shortHi(e))}</span><span class="tn-en">${esc(shortEn(e))}</span></span>
   </button>`;
 }
 
@@ -633,10 +632,27 @@ function lineageView(rootId) {
       ${TREES.map(t => `<button type="button" data-tree="${t.id}" class="flex-shrink-0 px-3.5 py-2 rounded-full font-label-md text-label-md ${t.id === root ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface-container text-on-surface-variant'}">${esc(M[t.id] ? M[t.id].hi : t.label)}</button>`).join('')}
     </div>
     <section class="bg-surface-container-low rounded-xl p-3 shadow-sm">
-      <div class="tree-scroll">${renderTree(root)}</div>
+      <div class="tree-scroll-wrap">
+        <div class="tree-scroll">${renderTree(root)}</div>
+      </div>
+      <p class="tree-scroll-note font-label-sm" hidden>Swipe sideways to see every branch →</p>
     </section>
   </div>`;
   app.querySelectorAll('[data-tree]').forEach(b => b.onclick = () => { location.hash = 'lineage/' + b.dataset.tree; });
+  const sc = app.querySelector('.tree-scroll');
+  const wrap = app.querySelector('.tree-scroll-wrap');
+  const note = app.querySelector('.tree-scroll-note');
+  if (sc && wrap) {
+    const updateHint = () => {
+      const overflow = sc.scrollWidth > sc.clientWidth + 4;
+      wrap.classList.toggle('can-scroll', overflow);
+      wrap.classList.toggle('at-end', sc.scrollLeft + sc.clientWidth >= sc.scrollWidth - 4);
+      if (note) note.hidden = !overflow;
+    };
+    sc.addEventListener('scroll', updateHint, { passive: true });
+    requestAnimationFrame(updateHint);
+    setTimeout(updateHint, 50);
+  }
 }
 
 function mapView(journeyId) {

@@ -32,15 +32,17 @@
 @keyframes eq{0%,100%{height:6px}50%{height:14px}}
 
 .tree{display:flex;flex-direction:column;align-items:center;gap:0;padding:4px 0 8px}
-.tree-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:stretch;gap:8px;width:100%}
+.tree-row{display:flex;flex-wrap:nowrap;justify-content:center;align-items:stretch;gap:8px;width:max-content;max-width:100%;margin:0 auto}
 .tree-line{width:2px;height:12px;background:#dcc0ba;margin:1px auto}
 .tree-branch{display:flex;flex-direction:column;align-items:center;min-width:0;padding:0 4px}
 .tree-branch-row{display:flex;flex-wrap:nowrap;justify-content:center;align-items:flex-start;gap:4px;width:max-content;min-width:100%;
   border-top:2px solid #dcc0ba;padding-top:14px;margin-top:2px}
 .tree-node{
+  display:flex;align-items:center;gap:6px;
   background:#fbf1f2;border:1px solid #e3d8c8;border-radius:8px;
-  padding:6px 4px 6px 16px;text-align:left;cursor:pointer;position:relative;
-  min-width:70px;max-width:80px;box-shadow:0 1px 3px rgba(158,67,42,.04);
+  padding:6px 8px 6px 6px;text-align:left;cursor:pointer;position:relative;
+  min-width:108px;max-width:132px;box-shadow:0 1px 3px rgba(158,67,42,.04);
+  box-sizing:border-box;overflow:visible;
 }
 .tree-node .dot{position:absolute;left:10px;top:50%;transform:translateY(-50%);
   width:8px;height:8px;border-radius:50%;background:#9e432a}
@@ -65,13 +67,11 @@
 
 .wife-col{display:flex;flex-direction:column;align-items:center;min-width:70px;padding:0 2px;flex-shrink:0}
 .wife-kids{display:flex;flex-direction:column;align-items:center;gap:4px}
-.tree-node{min-width:70px;max-width:80px}
 .tn-hi{word-break:break-word}
 
 .tree-scroll{overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch}
 .tree{width:max-content;min-width:100%;margin:0 auto}
 
-.tree-node{overflow:visible;box-sizing:border-box}
 .tn-hi,.tn-en{white-space:normal;overflow-wrap:break-word;word-break:break-word}
 
 .tree-scroll::-webkit-scrollbar{display:block !important;height:6px}
@@ -85,8 +85,9 @@
 .g-f{background:#fce7f3;color:#be185d}
 .g-d{background:#ffedd5;color:#9e432a}
 .tree-node .dot{display:none}
-.tree-node .g-icon{position:absolute;left:6px;top:50%;transform:translateY(-50%);width:16px;height:16px}
-.tree-node .g-icon svg{width:11px;height:11px}
+.tree-node .g-icon{position:static;transform:none;width:18px;height:18px;flex-shrink:0}
+.tree-node .g-icon svg{width:12px;height:12px}
+.tn-text{min-width:0;flex:1;display:block}
 
 /* Couples: person ♥ spouse, never stacked as parent-child */
 .couple{display:flex;align-items:center;justify-content:center;gap:3px;flex-wrap:nowrap}
@@ -109,3 +110,17 @@
 .gen-arrow{color:#89726c}
 .card-preview{width:100%;max-width:320px;margin:0 auto;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(35,31,32,.12)}
 .card-preview img{width:100%;display:block;background:#fff8f8}
+
+.tree-scroll-wrap{position:relative}
+.tree-scroll{overflow-x:auto;width:100%;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#c4a59a transparent;padding-bottom:8px}
+.tree-scroll-wrap.can-scroll::after{
+  content:"›";
+  position:absolute;right:0;top:0;bottom:10px;width:32px;
+  background:linear-gradient(90deg,transparent,#fbf1f2 55%);
+  color:#9e432a;font-size:26px;font-weight:600;
+  display:flex;align-items:center;justify-content:flex-end;
+  pointer-events:none;padding-right:2px;
+}
+.tree-scroll-wrap.at-end::after{opacity:0}
+.tree-scroll-note{text-align:center;margin:4px 0 0;color:#89726c}
+.tree-scroll-note[hidden]{display:none}
