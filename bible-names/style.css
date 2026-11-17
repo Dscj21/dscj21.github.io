@@ -233,3 +233,33 @@ html.has-native-banner main#app{padding-bottom:calc(6rem + var(--adh,50px) + env
 .chcard .ch-chev{color:#89726c;flex-shrink:0}
 .sheet-card .chcard{box-shadow:none;background:#f5eced}
 .gt-yt{color:#7f2c15}
+
+/* v9: unverified, tree expand, clusters, mini-map */
+.hv-badge{display:inline-flex;align-items:center;font-size:10px;line-height:1;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:#7f2c15;background:#ffd0ac;border-radius:999px;padding:3px 7px;vertical-align:middle}
+.sib-label{text-align:center;font-size:11px;color:#89726c;margin:2px 0 0;letter-spacing:.04em;text-transform:uppercase}
+.sib-row{gap:6px;justify-content:center}
+.sib-row .tree-node{opacity:.92}
+.tree-exp{margin-top:2px;border:0;background:#f5eced;color:#7f2c15;font-size:11px;font-weight:600;border-radius:999px;padding:2px 8px;cursor:pointer}
+.tree-exp:active{transform:scale(.96)}
+.kid-cell{display:flex;flex-direction:column;align-items:center;min-width:0}
+.gkid-row{gap:4px;justify-content:center;flex-wrap:wrap;max-width:360px}
+.mini-map{height:180px;width:100%;border-radius:12px;overflow:hidden;background:#e9e0e1}
+.list-more{display:block;width:100%;margin:4px 0 8px;border:0;background:#9e432a;color:#fff;font-weight:600;font-size:14px;border-radius:999px;padding:12px 16px;cursor:pointer}
+.list-more:active{transform:scale(.98)}
+.place-dot{background:transparent;border:0}
+.place-dot span{display:block;width:12px;height:12px;border-radius:50%;background:#9e432a;border:2px solid #fff;box-shadow:0 1px 3px rgba(127,44,21,.35)}
+.marker-cluster-small{background:rgba(158,67,42,.25)}
+.marker-cluster-small div{background:#9e432a;color:#fff}
+.marker-cluster-medium{background:rgba(127,44,21,.3)}
+.marker-cluster-medium div{background:#7f2c15;color:#fff}
+.marker-cluster-large{background:rgba(92,98,59,.35)}
+.marker-cluster-large div{background:#5c623b;color:#fff}
+.marker-cluster div{font-family:Inter,sans-serif;font-weight:600}
+.leg-dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:#9e432a;border:2px solid #fff;box-shadow:0 0 0 1px #dcc0ba;margin-right:6px;vertical-align:middle}
+.tree.compact-tree,.tree{align-items:center}
+.anc-col{display:flex;flex-direction:column;align-items:center;width:100%}
+.anc-col .tree-row{justify-content:center;width:auto;margin:0 auto}
+.anc-col .tree-line{margin:1px auto}
+.anc-more{margin:0 0 6px}
+.sib-label,.sib-row{width:100%;justify-content:center}
+.union-kids .wife-kids{flex-wrap:wrap;flex-direction:row;justify-content:center}

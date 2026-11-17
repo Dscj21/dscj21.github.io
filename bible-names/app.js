@@ -5,37 +5,54 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
+const CACHE_V = '?v=9';
 const people = () => D.filter(e => e.t === 'p');
 const places = () => D.filter(e => e.t === 'l');
-function kidsOf(id) {
-  const person = M[id];
-  const linked = D.filter(x => (x.father || []).includes(id) || (x.mother || []).includes(id));
-  const listed = (person && person.children) ? person.children.map(cid => linked.find(x => x.id === cid)).filter(Boolean) : [];
-  const rest = linked.filter(x => !listed.some(y => y.id === x.id));
-  return listed.concat(rest);
+const uniq = arr => [...new Set((arr || []).filter(Boolean))];
+const asArr = v => !v ? [] : (Array.isArray(v) ? v.filter(Boolean) : [v]);
+function rid(id) {
+  if (!id) return '';
+  const s = String(id);
+  return ALIAS[s] || ALIAS[s.toLowerCase()] || s;
 }
-const uniq = arr => [...new Set(arr.filter(Boolean))];
+function rec(id) { return id ? M[rid(id)] : undefined; }
+function isGodId(id) {
+  const s = String(id || '');
+  return s.startsWith('god_') || s.startsWith('yahweh_') || (rec(id) && rec(id).g === 'd');
+}
+function kidsOf(id) {
+  id = rid(id);
+  const person = rec(id);
+  if (!person) return [];
+  return asArr(person.children).map(rid).map(rec).filter(Boolean);
+}
 function coParents(id) {
-  const e = M[id];
-  const fromKids = kidsOf(id).flatMap(k => [...(k.father || []), ...(k.mother || [])].filter(x => x !== id));
-  return uniq([...(e.spouse || []), ...fromKids]).filter(x => M[x]);
+  id = rid(id);
+  const e = rec(id);
+  if (!e) return [];
+  return uniq(asArr(e.spouse).map(rid)).filter(x => rec(x) && !isGodId(x));
 }
 function kidsWith(id, other) {
-  return kidsOf(id).filter(k => (k.father || []).includes(other) || (k.mother || []).includes(other));
+  id = rid(id); other = rid(other);
+  return kidsOf(id).filter(k => asArr(k.father).map(rid).includes(other) || asArr(k.mother).map(rid).includes(other));
 }
 function fullSiblings(id) {
-  const e = M[id];
-  const fa = e.father || [], mo = e.mother || [];
-  if (!fa.length && !mo.length) return e.siblings || [];
-  return D.filter(x => {
-    if (x.id === id || x.t !== 'p') return false;
-    const sameFa = fa.length && (x.father || []).some(p => fa.includes(p));
-    const sameMo = mo.length && (x.mother || []).some(p => mo.includes(p));
-    return fa.length && mo.length ? (sameFa && sameMo) : (sameFa || sameMo);
-  }).map(x => x.id);
+  id = rid(id);
+  const e = rec(id);
+  if (!e) return [];
+  return asArr(e.siblings).map(rid).filter(x => x !== id && rec(x));
+}
+function normalize(e) {
+  e.father = asArr(e.father).filter(x => !isGodId(x));
+  e.mother = asArr(e.mother).filter(x => !isGodId(x));
+  e.spouse = asArr(e.spouse);
+  e.children = asArr(e.children);
+  e.siblings = asArr(e.siblings);
+  e.aka = e.aka || [];
+  return e;
 }
 function chips(ids) {
-  return `<div class="flex flex-wrap gap-2">${ids.map(id => M[id] ? `<a href="#p/${id}" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface font-label-md text-label-md no-underline">${esc(M[id].hi)}</a>` : '').join('')}</div>`;
+  return `<div class="flex flex-wrap gap-2">${ids.map(id => rec(id) ? `<a href="#p/${rec(id).id}" class="px-3 py-1.5 rounded-full bg-surface-container text-on-surface font-label-md text-label-md no-underline">${esc(rec(id).hi)}</a>` : '').join('')}</div>`;
 }
 const letterOf = e => shortEn(e).charAt(0).toUpperCase();
 function genderIcon(g) {
@@ -47,16 +64,23 @@ function genderIcon(g) {
 const women = () => people().filter(e => e.g === 'f');
 
 
-let D = [], M = {};
+let D = [], M = {}, INDEX = [], ALIAS = {}, FAM = {}, GEO = null, STATS = {};
+let chunkLoaded = {};
 let q = '', chip = 'all', letter = '';
 let speakLang = 'hi';
 let fav = new Set(JSON.parse(localStorage.getItem('hn-fav') || '[]'));
 let mapObj = null;
+let mapCluster = null;
 let C = {};
+let listLimit = 40;
+let TREE_EXPAND = new Set();
+let TREE_ROOT = '';
+let mapQuery = '';
 
-const POPULAR = ['jesus', 'david', 'abraham', 'mary'];
+const POPULAR = ['jesus', 'david', 'abraham', 'mary', 'moses', 'noah'];
 const TREES = [
   { id: 'adam', label: 'Adam' },
+  { id: 'noah', label: 'Noah' },
   { id: 'abraham', label: 'Abraham' },
   { id: 'isaac', label: 'Isaac' },
   { id: 'jacob', label: 'Jacob' },
@@ -64,6 +88,7 @@ const TREES = [
   { id: 'david', label: 'David' },
   { id: 'jesus', label: 'Jesus' }
 ];
+const JOURNEY_LAB = { abraham: 'Abraham', exodus: 'Exodus', jacob: 'Jacob', jesus: 'Jesus', paul1: 'Paul 1', paul2: 'Paul 2', paul3: 'Paul 3', paulrome: 'Rome', paul: 'Paul' };
 const THOUGHT = {
   ref: 'मत्ती 18:20',
   hi: 'क्योंकि जहाँ दो या तीन मेरे नाम पर इकट्ठे होते हैं वहाँ मैं उनके बीच में होता हूँ।',
@@ -73,7 +98,73 @@ const THOUGHT = {
 function saveFav() { localStorage.setItem('hn-fav', JSON.stringify([...fav])); }
 
 function dayEntry() {
-  return D[Math.floor(Date.now() / 864e5) % D.length];
+  const pool = people().filter(e => e.hv);
+  if (!pool.length) return D[0];
+  return pool[Math.floor(Date.now() / 864e5) % pool.length];
+}
+function letterOfEntry(e) {
+  const s = (e.en || '').replace(/[^A-Za-z]/g, '');
+  return (s.charAt(0) || 'A').toUpperCase();
+}
+async function loadChunk(letter) {
+  const L = (letter || 'A').toUpperCase();
+  if (chunkLoaded[L]) return;
+  chunkLoaded[L] = 'loading';
+  const items = await fetch('data/chunks/' + L + '.json' + CACHE_V).then(r => {
+    if (!r.ok) throw new Error('chunk ' + L);
+    return r.json();
+  });
+  items.forEach(d => {
+    const cur = M[d.id] || {};
+    M[d.id] = normalize(Object.assign({}, cur, d, {
+      father: d.father != null ? d.father : cur.father,
+      mother: d.mother != null ? d.mother : cur.mother,
+      spouse: d.spouse != null ? d.spouse : cur.spouse,
+      children: d.children != null ? d.children : cur.children,
+      siblings: d.siblings != null ? d.siblings : cur.siblings,
+      _full: true
+    }));
+    const al = M[d.id].alias;
+    if (al && !M[al]) M[al] = M[d.id];
+  });
+  chunkLoaded[L] = true;
+}
+async function loadDetail(id) {
+  id = rid(id);
+  const e = rec(id);
+  if (!e) return null;
+  if (e._full) return e;
+  try { await loadChunk(letterOfEntry(e)); } catch (err) { console.warn(err); }
+  return rec(id) || e;
+}
+async function ensureGeo() {
+  if (GEO) return GEO;
+  GEO = await fetch('data/geo.json' + CACHE_V).then(r => r.json());
+  GEO.forEach(g => {
+    if (M[g.id]) { M[g.id].ll = g.ll; if (!M[g.id].hi) M[g.id].hi = g.hi; }
+  });
+  return GEO;
+}
+function hvBadge(e) {
+  return e && e.hv === false ? '<span class="hv-badge">Unverified Hindi</span>' : '';
+}
+function meaningNote(e) {
+  if (!e || !e.m) return '';
+  if (e.ms === 'strongs' || e.ms === "strong's" || e.ms === 'bdb') return '<p class="font-label-sm text-on-surface-variant mt-1">Short meaning from the public-domain Strong’s lexicon.</p>';
+  return '';
+}
+function paged(list) {
+  const n = list.length;
+  const slice = list.slice(0, listLimit);
+  const more = n > listLimit
+    ? `<button type="button" class="list-more" id="listMore">Show more (${n - listLimit} left of ${n})</button>`
+    : '';
+  return { slice, more, n };
+}
+function bindMore() {
+  const btn = document.getElementById('listMore');
+  if (!btn) return;
+  btn.onclick = () => { listLimit += 40; route(); };
 }
 
 const MAP_ATTR = 'Tiles © Esri · © OpenStreetMap contributors';
@@ -303,11 +394,22 @@ function channelsSection() {
 }
 
 function aboutSheet() {
+  const a = (C && C.attribution) || {};
+  const nP = (STATS && STATS.people) || people().length;
+  const nL = (STATS && STATS.places) || places().length;
+  const pPct = STATS && STATS.peopleHindiPct != null ? STATS.peopleHindiPct : '';
+  const lPct = STATS && STATS.placesHindiPct != null ? STATS.placesHindiPct : '';
+  const cov = (pPct !== '' ? ` ${pPct}% of people and ${lPct}% of places have a verified IRV Hindi spelling.` : '');
   openSheet(`
     <button class="text-primary font-label-md mb-2" onclick="closeSheet()">Close</button>
     <h2 class="font-headline-md text-headline-md text-primary mb-2">Holy Names</h2>
-    <p class="font-body-md text-body-md text-on-surface-variant">A lexicon of Bible names and places for Hindi-speaking Christians. Each entry shows the IRV Hindi spelling, the original Hebrew or Greek, a Devanagari pronunciation, and a simple Hindi meaning.</p>
-    <p class="font-body-sm text-body-sm text-on-surface-variant mt-3">${D.length} entries · Strong's lexicon (public domain) · IRV Hindi Bible</p>
+    <p class="font-body-md text-body-md text-on-surface-variant">A lexicon of Bible names and places for Hindi-speaking Christians. Each entry shows the IRV Hindi spelling when we could verify it, the original Hebrew or Greek, a Devanagari pronunciation, and a simple Hindi meaning.</p>
+    <p class="font-body-sm text-body-sm text-on-surface-variant mt-3">${nP} people · ${nL} places.${cov}</p>
+    <h3 class="font-headline-sm text-primary mt-4 mb-1">Sources</h3>
+    <p class="font-body-sm text-on-surface-variant">${esc(a.theographic || 'People, family relationships, and places (including many coordinates) are from Theographic Bible Metadata (CC BY-SA 4.0).')}</p>
+    <p class="font-body-sm text-on-surface-variant mt-2">${esc(a.openbible || 'Some coordinates also draw on OpenBible.info Bible geocoding (CC BY).')}</p>
+    <p class="font-body-sm text-on-surface-variant mt-2">${esc(a.irv || 'Hindi names and verses are from the IRV Hindi Bible. Names we could not match confidently are marked unverified and shown in English.')}</p>
+    <p class="font-body-sm text-on-surface-variant mt-2">${esc(a.strongs || 'Short meanings for unmatched entries come from the public-domain Strong’s lexicon.')}</p>
     <div class="gt-yt font-label-sm font-semibold mt-4 mb-2">Our channels</div>
     ${channelsHTML()}`);
 }
@@ -349,48 +451,51 @@ function nameCard(e) {
         <div class="flex items-baseline gap-2 flex-wrap">
           <h4 class="font-headline-sm text-headline-sm font-bold text-on-surface inline-flex items-center gap-1.5">${genderIcon(e.g)} ${esc(e.hi)}</h4>
           <span class="font-label-sm text-label-sm text-on-surface-variant font-medium">(${esc(shortEn(e))})</span>
+          ${hvBadge(e)}
         </div>
-        <div class="text-[18px] leading-tight text-primary font-semibold mt-0.5 ${origCls(e)}">${esc(e.o)}</div>
+        ${e.o ? `<div class="text-[18px] leading-tight text-primary font-semibold mt-0.5 ${origCls(e)}">${esc(e.o)}</div>` : ''}
       </div>
       <button type="button" aria-label="Pronunciation" class="w-8 h-8 rounded-full bg-surface-container-highest text-primary flex items-center justify-center hover:bg-primary-container hover:text-on-primary transition-all active:scale-95 shadow-sm flex-shrink-0" data-speak="${e.id}">
         <span class="material-symbols-outlined text-[18px]">volume_up</span>
       </button>
     </div>
     <div class="flex flex-col gap-1.5 pt-1">
-      <div class="flex items-start gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
+      ${e.m ? `<div class="flex items-start gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
         <span class="material-symbols-outlined text-tertiary text-[16px] mt-0.5">menu_book</span>
         <span>Meaning: <strong class="text-on-surface font-semibold">“${esc(e.m)}”</strong></span>
-      </div>
+      </div>` : ''}
       <div class="flex items-center gap-2 flex-wrap">
-        <button type="button" class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-medium" data-verse="${e.id}">${esc(e.ref)}</button>
-        <span class="text-on-surface-variant font-label-sm text-label-sm">${esc(e.s)}</span>
+        ${e.ref ? `<button type="button" class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-medium" data-verse="${e.id}">${esc(e.ref)}</button>` : ''}
+        ${e.s ? `<span class="text-on-surface-variant font-label-sm text-label-sm">${esc(e.s)}</span>` : ''}
       </div>
     </div>
   </article>`;
 }
 
 function placeCard(e) {
-  const [lat, lon] = e.ll || [0, 0];
-  const bg = e.ll ? `background-image:url('${mapTile(lat, lon, 12)}')` : 'background:#5c623b';
+  const ll = e.ll;
+  const bg = ll ? `background-image:url('${mapTile(ll[0], ll[1], 12)}')` : 'background:#5c623b';
   return `<article class="bg-surface-container-low rounded-xl overflow-hidden shadow-sm flex flex-col cursor-pointer" data-open="${e.id}">
     <div class="place-hero w-full" style="${bg}">
       <div class="absolute inset-0 bg-gradient-to-t from-inverse-surface/85 via-inverse-surface/30 to-transparent"></div>
       <div class="absolute bottom-2.5 left-3 right-3 text-inverse-on-surface">
-        <div class="flex items-baseline gap-2">
+        <div class="flex items-baseline gap-2 flex-wrap">
           <span class="font-headline-sm text-headline-sm font-bold text-surface-container-lowest">${esc(e.hi)}</span>
           <span class="font-label-sm text-label-sm opacity-90">(${esc(shortEn(e))})</span>
-          <span class="font-body-sm text-body-sm font-semibold text-secondary-fixed ml-auto ${origCls(e)}">${esc(e.o)}</span>
+          ${hvBadge(e)}
+          ${e.o ? `<span class="font-body-sm text-body-sm font-semibold text-secondary-fixed ml-auto ${origCls(e)}">${esc(e.o)}</span>` : ''}
         </div>
       </div>
     </div>
     <div class="p-3.5 flex flex-col gap-2">
-      <div class="flex items-center justify-between text-body-sm font-body-sm gap-2">
+      ${e.m ? `<div class="flex items-center justify-between text-body-sm font-body-sm gap-2">
         <span class="text-on-surface-variant font-medium">Original Literal Meaning:</span>
         <span class="font-semibold text-tertiary text-right">“${esc(e.m)}”</span>
-      </div>
+      </div>` : ''}
       <div class="flex items-center gap-2 pt-1">
-        <button type="button" class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-medium" data-verse="${e.id}">${esc(e.ref)}</button>
-        <span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-medium">${esc(e.pr)}</span>
+        ${e.ref ? `<button type="button" class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-medium" data-verse="${e.id}">${esc(e.ref)}</button>` : ''}
+        ${e.pr ? `<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-medium">${esc(e.pr)}</span>` : ''}
+        ${e.ft ? `<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-medium">${esc(e.ft)}</span>` : ''}
       </div>
     </div>
   </article>`;
@@ -443,7 +548,8 @@ function alphaStrip(list) {
 
 function matchQuery(e, t) {
   if (!t) return true;
-  return (e.hi + e.en + e.pr + e.m + e.o + e.s + e.ref).toLowerCase().includes(t);
+  const hay = [e.hi, e.en, e.pr, e.m, e.o, e.s, e.ref, e.alias, ...(e.aka || [])].join(' ').toLowerCase();
+  return hay.includes(t);
 }
 
 function filtered(base) {
@@ -469,7 +575,8 @@ function home() {
     const title = chip === 'm' ? 'Meanings' : letter ? `Names · ${letter}` : 'Results';
     body = `<section class="flex flex-col gap-3">
       <h3 class="font-headline-sm text-headline-sm px-1">${title} <span class="text-on-surface-variant font-label-sm">${results.length}</span></h3>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${results.map(chip === 'l' ? placeCard : nameCard).join('') || '<p class="text-on-surface-variant px-1">No match</p>'}</div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${paged(results).slice.map(chip === 'l' ? placeCard : nameCard).join('') || '<p class="text-on-surface-variant px-1">No match</p>'}</div>
+      ${paged(results).more}
     </section>`;
   } else {
     body = `
@@ -513,7 +620,7 @@ function home() {
 
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-lg">
     <section class="flex flex-col gap-space-sm pt-space-xs">
-      ${searchBox('Search: Jesus, Jerusalem, David, Abraham...')}
+      ${searchBox('Search in Hindi or English…')}
       ${chipsBar()}
     </section>
     ${searching ? '' : `<section class="flex flex-col gap-space-xs">
@@ -563,17 +670,20 @@ function listView(kind) {
   chip = kind === 'm' ? 'm' : kind;
   const list = kind === 'l' ? places() : people();
   const shown = filtered(kind === 'l' ? places() : (kind === 'm' ? D : people()));
+  const page = paged(shown);
   const title = kind === 'l' ? 'Holy Places & Cities' : kind === 'm' ? 'Meanings' : 'Biblical Names';
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-lg pt-space-xs">
-    ${searchBox(kind === 'l' ? 'Search places...' : 'Search names...')}
+    ${searchBox(kind === 'l' ? 'Search places in Hindi or English…' : 'Search names in Hindi or English…')}
     ${alphaStrip(list)}
     <section class="flex flex-col gap-3">
-      <h3 class="font-headline-sm text-headline-sm px-1">${title} <span class="text-on-surface-variant font-label-sm">${shown.length}</span></h3>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${shown.map(kind === 'l' ? placeCard : nameCard).join('') || '<p class="text-on-surface-variant px-1">No match</p>'}</div>
+      <h3 class="font-headline-sm text-headline-sm px-1">${title} <span class="text-on-surface-variant font-label-sm">${page.n}</span></h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${page.slice.map(kind === 'l' ? placeCard : nameCard).join('') || '<p class="text-on-surface-variant px-1">No match</p>'}</div>
+      ${page.more}
     </section>
   </div>`;
   bindSearch();
   bindClicks();
+  bindMore();
 }
 
 function savedView() {
@@ -602,7 +712,7 @@ function familyBits(e) {
   for (const p of partners) {
     const kids = kidsWith(e.id, p).map(k => k.id);
     kids.forEach(id => grouped.add(id));
-    if (kids.length) row(`Children with ${esc(shortHi(M[p]))}`, kids);
+    if (kids.length) row(`Children with ${esc(shortHi(rec(p)||{}))}`, kids);
   }
   const leftover = kidsOf(e.id).map(k => k.id).filter(id => !grouped.has(id));
   row('Children', leftover);
@@ -642,7 +752,7 @@ function detail(e) {
       <div class="flex justify-between items-start gap-3">
         <div>
           <div class="flex items-baseline gap-3 flex-wrap">
-            <h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary tracking-tight inline-flex items-center gap-2">${genderIcon(e.g)} ${esc(e.hi)}</h1>
+            <h1 class="font-headline-lg-mobile text-headline-lg-mobile font-bold text-primary tracking-tight inline-flex items-center gap-2">${genderIcon(e.g)} ${esc(e.hi)}</h1>${hvBadge(e)}
             <span class="text-[26px] leading-tight text-on-surface-variant ${origCls(e)}">${esc(e.o)}</span>
           </div>
           <div class="font-label-md text-label-md text-on-surface-variant mt-1">${esc(e.en)}</div>
@@ -654,9 +764,12 @@ function detail(e) {
           <span class="material-symbols-outlined text-[16px]">lightbulb</span>
           Literal Meaning
         </span>
-        <p class="font-body-lg text-body-lg text-on-surface font-medium leading-relaxed">“${esc(e.m)}”</p>
+        ${e.m ? `<p class="font-body-lg text-body-lg text-on-surface font-medium leading-relaxed">“${esc(e.m)}”</p>${meaningNote(e)}` : '<p class="font-body-md text-on-surface-variant">No short meaning yet.</p>'}
+        ${e.hv === false ? '<p class="font-body-sm text-on-surface-variant mt-2">Hindi spelling is unverified — we could not confidently match this name in the IRV verse text, so the English name is shown.</p>' : ''}
       </div>
     </section>
+
+    ${e.t === 'l' || (e.pl && e.pl.length) || e.ll ? '<div id="miniMapWrap"></div>' : '<div id="miniMapWrap" hidden></div>'}
 
     <section class="bg-surface-container-low rounded-xl p-4 shadow-sm flex flex-col gap-3">
       <h3 class="font-headline-sm text-headline-sm font-semibold">Authentic Pronunciation</h3>
@@ -680,11 +793,6 @@ function detail(e) {
       <p class="font-body-lg text-body-lg leading-relaxed bg-surface-container-lowest/80 rounded-lg p-3.5">${esc(e.v)}</p>
     </section>
 
-    ${e.ll ? `<section class="bg-surface-container-low rounded-xl p-4 shadow-sm flex flex-col gap-2">
-      <h3 class="font-headline-sm text-headline-sm font-semibold">Map</h3>
-      <div id="mapel"></div>
-    </section>` : ''}
-
     ${familyBits(e)}
 
     <div class="flex gap-2 flex-wrap">
@@ -705,45 +813,76 @@ function detail(e) {
   document.getElementById('btnWa').onclick = () => open('https://wa.me/?text=' + encodeURIComponent(shareText(e)));
   document.getElementById('btnCard').onclick = () => { location.hash = 'card/' + e.id; };
   app.querySelectorAll('.lang-btn').forEach(b => b.onclick = () => { speakLang = b.dataset.lang; detail(e); });
-  if (e.ll) {
+  mountMiniMap(e);
+}
+
+async function relatedPlacePoints(e) {
+  await ensureGeo().catch(() => {});
+  const pts = [];
+  const add = p => {
+    if (!p || !p.ll) return;
+    if (pts.some(x => x.id === p.id)) return;
+    pts.push({ id: p.id, hi: p.hi || p.en, en: p.en, ll: p.ll });
+  };
+  if (e.ll) add(e);
+  asArr(e.pl).forEach(id => add(rec(id)));
+  return pts;
+}
+
+function mountMiniMap(e) {
+  const wrap = document.getElementById('miniMapWrap');
+  if (!wrap) return;
+  const draw = pts => {
+    if (!pts.length) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = `<section class="bg-surface-container-low rounded-xl p-4 shadow-sm flex flex-col gap-2">
+      <h3 class="font-headline-sm text-headline-sm font-semibold">${e.t === 'l' ? 'Map' : 'Related places'}</h3>
+      <div id="mapel" class="mini-map"></div>
+    </section>`;
     const go = () => {
       if (!window.L) return setTimeout(go, 200);
-      const m = L.map('mapel', { scrollWheelZoom: false }).setView(e.ll, 10);
+      const m = L.map('mapel', { scrollWheelZoom: false });
       m.attributionControl.setPrefix('Leaflet');
       addBaseMap(m);
-      L.marker(e.ll, { icon: placeDivIcon({ hi: e.hi, en: shortEn(e), side: 'right' }), zIndexOffset: 400 })
-        .addTo(m)
-        .bindPopup(`<strong>${esc(e.hi)}</strong><br>${esc(shortEn(e))}`)
-        .openPopup();
+      pts.forEach(p => {
+        const mk = L.marker(p.ll, {
+          icon: placeDivIcon({ hi: shortMapName(p.hi), en: shortMapName(p.en), side: 'right' }),
+          zIndexOffset: 400
+        }).addTo(m).bindPopup(`<strong>${esc(p.hi)}</strong><br>${esc(p.en)}`);
+        mk.on('click', () => { if (p.id !== e.id) location.hash = 'p/' + p.id; });
+      });
+      if (pts.length === 1) m.setView(pts[0].ll, 9);
+      else m.fitBounds(pts.map(p => p.ll), { padding: [28, 28], maxZoom: 8 });
       setTimeout(() => m.invalidateSize(), 80);
     };
     go();
-  }
+  };
+  relatedPlacePoints(e).then(draw);
 }
 
 function treeNode(id, kind) {
-  const e = M[id];
+  id = rid(id);
+  const e = rec(id);
   if (!e) return '';
-  return `<button type="button" class="tree-node ${kind || ''}" onclick="location.hash='p/${id}'">
+  return `<button type="button" class="tree-node ${kind || ''}" data-center="${id}">
     ${genderIcon(e.g)}
     <span class="tn-text"><span class="tn-hi">${esc(shortHi(e))}</span><span class="tn-en">${esc(shortEn(e))}</span></span>
   </button>`;
 }
 
 function coupleRow(a, b, aKind, bKind) {
-  if (a && !b) return treeNode(a, aKind);
-  if (!a && b) return treeNode(b, bKind);
+  if (a && !b) return `<div class="tree-row">${treeNode(a, aKind)}</div>`;
+  if (!a && b) return `<div class="tree-row">${treeNode(b, bKind)}</div>`;
   if (!a && !b) return '';
-  return `<div class="couple">${treeNode(a, aKind)}<span class="couple-heart" aria-hidden="true">♥</span>${treeNode(b, bKind || '')}</div>`;
+  return `<div class="tree-row"><div class="couple">${treeNode(a, aKind)}<span class="couple-heart" aria-hidden="true">♥</span>${treeNode(b, bKind || '')}</div></div>`;
 }
 
-// Preferred wife order for well-known families (wives stay on one row with the husband).
 function preferredPartners(id) {
-  const raw = coParents(id);
+  id = rid(id);
+  const raw = coParents(id).map(rid);
   const PREFERRED = {
-    abraham: ['sarah', 'hagar', 'keturah'],
-    jacob: ['leah', 'rachel', 'bilhah', 'zilpah'],
-    david: ['michal', 'ahinoam', 'abigail', 'maacah', 'haggith', 'bathsheba']
+    abraham_58: ['sarah_2473', 'hagar_1348', 'keturah_1782'],
+    israel_682: ['leah_1813', 'rachel_2386', 'bilhah_502', 'zilpah_3081'],
+    david_994: ['michal_2073', 'ahinoam_153', 'abigail_26', 'maacah_1839', 'haggith_1353', 'bathsheba_416']
   };
   const pref = PREFERRED[id];
   if (!pref) return raw;
@@ -751,29 +890,80 @@ function preferredPartners(id) {
   return pref.filter(x => set.has(x)).concat(raw.filter(x => !pref.includes(x)));
 }
 
+function parentPair(id) {
+  const e = rec(id);
+  if (!e) return { fa: '', mo: '' };
+  const fa = asArr(e.father).map(rid).find(p => rec(p) && !isGodId(p)) || '';
+  const mo = asArr(e.mother).map(rid).find(p => rec(p) && !isGodId(p)) || '';
+  return { fa, mo };
+}
+
+function ancestorGens(id, levels) {
+  const gens = [];
+  let cur = rid(id);
+  const seen = new Set([cur]);
+  for (let i = 0; i < (levels || 3); i++) {
+    const { fa, mo } = parentPair(cur);
+    if (!fa && !mo) break;
+    if ((fa && seen.has(fa)) || (mo && seen.has(mo))) break;
+    gens.unshift({ fa, mo });
+    if (fa) seen.add(fa);
+    if (mo) seen.add(mo);
+    cur = fa || mo;
+  }
+  return gens;
+}
+
+function kidCell(k) {
+  const gkids = kidsOf(k.id);
+  const open = TREE_EXPAND.has(k.id);
+  let html = `<div class="kid-cell">${treeNode(k.id)}`;
+  if (gkids.length) {
+    html += `<button type="button" class="tree-exp" data-expand="${k.id}">${open ? 'Hide' : '+' + gkids.length}</button>`;
+    if (open) {
+      html += `<div class="tree-line"></div><div class="tree-row gkid-row">${gkids.map(c => treeNode(c.id)).join('')}</div>`;
+    }
+  }
+  html += `</div>`;
+  return html;
+}
+
 function renderTree(rootId) {
-  const e = M[rootId];
+  rootId = rid(rootId);
+  const e = rec(rootId);
   if (!e) return '<p class="text-on-surface-variant">No family links for this name yet.</p>';
-  const fa = (e.father || [])[0], mo = (e.mother || [])[0];
   const partners = preferredPartners(rootId);
   const grouped = new Set();
   partners.forEach(p => kidsWith(rootId, p).forEach(k => grouped.add(k.id)));
   const leftover = kidsOf(rootId).filter(k => !grouped.has(k.id));
-  let html = '<div class="tree">';
-  if (fa || mo) {
-    html += `<div class="tree-row">${coupleRow(fa, mo)}</div><div class="tree-line"></div>`;
+  const sibs = fullSiblings(rootId);
+  const ancLevels = TREE_EXPAND.has('__anc__') ? 6 : 2;
+  const gens = ancestorGens(rootId, ancLevels);
+  const allAnc = ancestorGens(rootId, 8);
+  let html = '<div class="tree compact-tree">';
+  html += '<div class="anc-col">';
+  if (allAnc.length > gens.length) {
+    html += `<button type="button" class="tree-exp anc-more" data-more-anc="1">Earlier ancestors</button>`;
+  }
+  gens.forEach(g => {
+    html += coupleRow(g.fa, g.mo);
+    html += '<div class="tree-line"></div>';
+  });
+  html += '</div>';
+  if (sibs.length) {
+    html += `<div class="sib-label">Siblings</div><div class="tree-row sib-row">${sibs.map(s => treeNode(s, 'sib')).join('')}</div><div class="tree-line"></div>`;
   }
   if (partners.length === 0) {
-    html += treeNode(rootId, 'me');
+    html += `<div class="tree-row">${treeNode(rootId, 'me')}</div>`;
     if (leftover.length) {
-      html += `<div class="from-joint"><div class="tree-line"></div><div class="tree-row">${leftover.map(k => treeNode(k.id)).join('')}</div></div>`;
+      html += `<div class="from-joint"><div class="tree-line"></div><div class="tree-row">${leftover.map(kidCell).join('')}</div></div>`;
     }
   } else if (partners.length === 1) {
     const kids = kidsWith(rootId, partners[0]).concat(leftover);
     html += `<div class="couple-block">`;
     html += coupleRow(rootId, partners[0], 'me', '');
     if (kids.length) {
-      html += `<div class="from-joint"><div class="joint-bar"></div><div class="tree-line"></div><div class="tree-row">${kids.map(k => treeNode(k.id)).join('')}</div></div>`;
+      html += `<div class="from-joint"><div class="joint-bar"></div><div class="tree-line"></div><div class="tree-row">${kids.map(kidCell).join('')}</div></div>`;
     }
     html += `</div>`;
   } else {
@@ -791,13 +981,13 @@ function renderTree(rootId) {
       html += `<div class="u-unit">`;
       if (kids.length) {
         html += `<div class="from-joint"><div class="joint-bar"></div><div class="tree-line"></div>`;
-        html += `<div class="wife-kids">${kids.map(k => treeNode(k.id)).join('')}</div></div>`;
+        html += `<div class="wife-kids">${kids.map(kidCell).join('')}</div></div>`;
       }
       html += `</div>`;
     }
     html += `</div>`;
     if (leftover.length) {
-      html += `<div class="leftover-kids">${leftover.map(k => treeNode(k.id)).join('')}</div>`;
+      html += `<div class="leftover-kids">${leftover.map(kidCell).join('')}</div>`;
     }
     html += `</div>`;
   }
@@ -807,11 +997,14 @@ function renderTree(rootId) {
 
 function lineageView(rootId) {
   setNav('lineage');
-  const root = (rootId && M[rootId]) ? rootId : 'abraham';
+  const resolved = rid(rootId);
+  if (TREE_ROOT && rid(TREE_ROOT) !== resolved) TREE_EXPAND = new Set();
+  const root = (resolved && rec(resolved)) ? resolved : rid('abraham');
+  TREE_ROOT = root;
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <div class="px-1">
       <h2 class="font-headline-md text-headline-md text-primary">Biblical Family Tree</h2>
-      <p class="font-body-sm text-body-sm text-on-surface-variant">The husband and his wives stand on one row (♥). Children appear under their own mother.</p>
+      <p class="font-body-sm text-body-sm text-on-surface-variant">Ancestors are above. The person and spouses share one row (♥). Children appear under their own mother. Tap a name to re-centre the tree, or + to show grandchildren.</p>
     </div>
     <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
       ${TREES.map(t => `<button type="button" data-tree="${t.id}" class="flex-shrink-0 px-3.5 py-2 rounded-full font-label-md text-label-md ${t.id === root ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface-container text-on-surface-variant'}">${esc(M[t.id] ? M[t.id].hi : t.label)}</button>`).join('')}
@@ -838,27 +1031,61 @@ function lineageView(rootId) {
     requestAnimationFrame(updateHint);
     setTimeout(updateHint, 50);
   }
+  app.querySelectorAll('[data-center]').forEach(b => b.onclick = () => {
+    const id = b.dataset.center;
+    if (!id) return;
+    if (rid(id) === rid(TREE_ROOT) && rec(id)) { location.hash = 'p/' + rec(id).id; return; }
+    TREE_EXPAND = new Set();
+    location.hash = 'lineage/' + id;
+  });
+  app.querySelectorAll('[data-expand]').forEach(b => b.onclick = ev => {
+    ev.stopPropagation();
+    const id = b.dataset.expand;
+    if (TREE_EXPAND.has(id)) TREE_EXPAND.delete(id); else TREE_EXPAND.add(id);
+    lineageView(TREE_ROOT);
+  });
+  const moreAnc = app.querySelector('[data-more-anc]');
+  if (moreAnc) moreAnc.onclick = ev => {
+    ev.stopPropagation();
+    if (TREE_EXPAND.has('__anc__')) TREE_EXPAND.delete('__anc__'); else TREE_EXPAND.add('__anc__');
+    lineageView(TREE_ROOT);
+  };
 }
 
 function mapView(journeyId) {
   setNav('map');
-  const list = places();
   const journeys = C.journeys || [];
   const j = journeys.find(x => x.id === journeyId);
-  const tabs = [['','Places']].concat(journeys.map(x => [x.id, x.id === 'paul' ? 'Paul' : x.id === 'exodus' ? 'Exodus' : 'Abraham']));
+  const tabs = [['', 'Places']].concat(journeys.map(x => [x.id, JOURNEY_LAB[x.id] || x.title || x.id]));
+  const geo = GEO || [];
+  const mq = (mapQuery || '').trim().toLowerCase();
+  const matched = mq ? geo.filter(e => matchQuery(e, mq)) : geo;
+  const page = paged(matched.map(g => rec(g.id) || g).filter(Boolean));
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <h2 class="font-headline-md text-headline-md text-primary">${j ? esc(j.hi) : 'Holy Places &amp; Cities'}</h2>
-    <div class="flex gap-2 overflow-x-auto no-scrollbar">${tabs.map(([id,lab]) => `<a href="${id?'#map/'+id:'#map'}" class="flex-shrink-0 px-3.5 py-2 rounded-full font-label-md no-underline ${(!j && !id) || (j && j.id===id)?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}">${lab}</a>`).join('')}</div>
-    ${j && j.approx ? '<p class="font-body-sm text-on-surface-variant">Approximate / traditional route. The exact path is debated.</p>' : (j ? `<p class="font-body-sm text-on-surface-variant">${esc(j.note||'')}</p>` : '')}
+    <div class="flex gap-2 overflow-x-auto no-scrollbar">${tabs.map(([id,lab]) => `<a href="${id?'#map/'+id:'#map'}" class="flex-shrink-0 px-3.5 py-2 rounded-full font-label-md no-underline ${(!j && !id) || (j && j.id===id)?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}">${esc(lab)}</a>`).join('')}</div>
+    ${j ? (j.note ? `<p class="font-body-sm text-on-surface-variant">${esc(j.note)}</p>` : (j.approx ? '<p class="font-body-sm text-on-surface-variant">Approximate / traditional route. The exact path is debated.</p>' : '')) : searchBox('Search places…')}
     <div id="mapel" class="map-lg shadow-sm"></div>
     <div class="map-legend" id="mapLegend"></div>
     <div id="placeInfo"></div>
-    ${j ? `<ol class="font-body-md list-decimal ps-5">${j.stops.map(s=>`<li class="mb-1"><strong>${esc(s.hi)}</strong> <span class="text-on-surface-variant">(${esc(s.n)})</span></li>`).join('')}</ol>` : `<div class="grid grid-cols-1 gap-3.5">${list.map(placeCard).join('')}</div>`}
+    ${j ? `<ol class="font-body-md list-decimal ps-5">${j.stops.map(s=>`<li class="mb-1"><strong>${esc(s.hi)}</strong> <span class="text-on-surface-variant">(${esc(s.n)})</span></li>`).join('')}</ol>` : `<p class="font-label-sm text-on-surface-variant px-1">${matched.length} places with map coordinates</p><div class="grid grid-cols-1 gap-3.5">${page.slice.map(placeCard).join('')}</div>${page.more}`}
   </div>`;
-  if (!j) bindClicks();
+  if (!j) {
+    const box = app.querySelector('#q');
+    if (box) box.value = mapQuery;
+    bindSearch();
+    const qi = document.getElementById('q');
+    if (qi) {
+      qi.oninput = ev => { mapQuery = ev.target.value; listLimit = 40; /* don't rerender whole map on each key — filter on enter/search bind */ };
+    }
+    bindClicks();
+    bindMore();
+  }
   const go = () => {
     if (!window.L) return setTimeout(go, 200);
-    if (mapObj) { try { mapObj.remove(); } catch (err) {} mapObj = null; }
+    if (mapObj) { try { mapObj.remove(); } catch (err) {} mapObj = null; mapCluster = null; }
+    const el = document.getElementById('mapel');
+    if (!el) return;
     const m = L.map('mapel', { scrollWheelZoom: true });
     m.attributionControl.setPrefix('Leaflet');
     addBaseMap(m);
@@ -875,6 +1102,7 @@ function mapView(journeyId) {
           icon: placeDivIcon({ num: i + 1, hi, en, side: sides[i] }),
           zIndexOffset: 400 + i
         }).addTo(m).bindPopup(`<strong>${i + 1}. ${esc(s.hi)}</strong><br>${esc(s.n)}`);
+        if (s.id) mk.on('click', () => { /* popup only */ });
         return { mk, ll: s.ll, num: i + 1, hi, en, side: sides[i] };
       });
       m.fitBounds(line.getBounds(), { padding: [40, 48] });
@@ -901,64 +1129,57 @@ function mapView(journeyId) {
         <div class="leg-item"><span class="leg-line"></span> Route</div>
         <div class="leg-item"><span class="leg-arrow"></span> Direction of travel</div>
         ${j.approx ? '<p class="leg-note">Approximate / traditional route. The exact path is debated.</p>' : ''}`;
-      const info = document.getElementById('placeInfo');
-      if (info) info.innerHTML = '';
     } else {
-      const info = document.getElementById('placeInfo');
-      const markers = {};
-      const setLabel = (id, on) => {
-        const e = M[id];
-        if (!e || !markers[id]) return;
-        markers[id].setIcon(placeDivIcon({ hi: e.hi, en: shortEn(e), side: 'right', labeled: on }));
-      };
-      const select = e => {
-        Object.keys(markers).forEach(id => setLabel(id, id === e.id));
-        m.setView(e.ll, 10);
-        info.innerHTML = `<div class="bg-surface-container-low rounded-xl p-4 shadow-sm">
-          <div class="flex items-baseline gap-2">
-            <h3 class="font-headline-sm text-headline-sm font-bold text-primary">${esc(e.hi)}</h3>
-            <span class="font-label-sm text-on-surface-variant">(${esc(shortEn(e))})</span>
-            <span class="ml-auto ${origCls(e)} text-primary font-semibold">${esc(e.o)}</span>
-          </div>
-          <p class="font-body-md text-body-md mt-1">“${esc(e.m)}”</p>
-          <p class="font-label-sm text-on-surface-variant mt-1">${esc(e.pr)} · ${esc(e.ref)}</p>
-          <a href="#p/${e.id}" class="inline-block mt-2 font-label-md text-primary font-semibold">View in Detail →</a>
-        </div>`;
-      };
-      list.forEach(e => {
-        if (!e.ll) return;
-        const mk = L.marker(e.ll, {
-          icon: placeDivIcon({ hi: e.hi, en: shortEn(e), side: 'right', labeled: false }),
-          zIndexOffset: 300
-        }).addTo(m).bindPopup(`<strong>${esc(e.hi)}</strong><br>${esc(shortEn(e))}`).on('click', () => select(e));
-        markers[e.id] = mk;
+      const dot = L.divIcon({ className: 'place-dot', html: '<span></span>', iconSize: [14, 14], iconAnchor: [7, 7] });
+      const cluster = (L.markerClusterGroup ? L.markerClusterGroup({
+        maxClusterRadius: 48,
+        showCoverageOnHover: false,
+        spiderfyOnMaxZoom: true,
+        disableClusteringAtZoom: 10
+      }) : L.layerGroup());
+      mapCluster = cluster;
+      const bounds = [];
+      matched.forEach(g => {
+        if (!g.ll) return;
+        const mk = L.marker(g.ll, { icon: dot, title: (g.hi || '') + ' / ' + (g.en || '') });
+        mk.on('click', () => { location.hash = 'p/' + g.id; });
+        cluster.addLayer(mk);
+        bounds.push(g.ll);
       });
+      m.addLayer(cluster);
+      if (bounds.length) m.fitBounds(bounds, { padding: [24, 24], maxZoom: 6 });
+      else m.setView([31.8, 35.2], 6);
       if (legend) legend.innerHTML = `
-        <div class="leg-item"><span class="mk-pin"></span> Bible place (Hindi + English)</div>
-        <p class="leg-note">Tap a pin for the Hindi and English name. Map labels are in English.</p>`;
-      const start = M.jerusalem && M.jerusalem.ll ? M.jerusalem : list.find(x => x.ll);
-      if (start) select(start);
+        <div class="leg-item"><span class="leg-dot"></span> Place (tap for the Hindi name and verses)</div>
+        <div class="leg-item">Clusters show how many places are in that area. Zoom or tap a cluster to spread them.</div>`;
     }
-    setTimeout(() => {
-      m.invalidateSize();
-      if (j) m.fire('zoomend');
-    }, 120);
+    setTimeout(() => m.invalidateSize(), 80);
   };
   go();
 }
 
 function bindSearch() {
+  const box = document.getElementById('q');
+  if (box && (location.hash || '').indexOf('map') === 1) {
+    box.addEventListener('keydown', ev => {
+      if (ev.key === 'Enter') { mapQuery = box.value; listLimit = 40; mapView(); ev.preventDefault(); }
+    });
+  }
   const input = document.getElementById('q');
   if (!input) return;
   input.addEventListener('input', () => {
     q = input.value;
+    listLimit = 40;
     const pos = input.selectionStart;
     const h = location.hash.slice(1);
-    if (h === 'people') listView('p');
-    else if (h === 'map' || h === 'places') listView('l');
-    else home();
-    const n = document.getElementById('q');
-    if (n) { n.focus(); n.setSelectionRange(pos, pos); }
+    const restore = () => { const n = document.getElementById('q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } };
+    if (h === 'people') { listView('p'); restore(); }
+    else if (h === 'places') { listView('l'); restore(); }
+    else if (h === 'map' || h.startsWith('map/')) {
+      mapQuery = q;
+      clearTimeout(bindSearch._t);
+      bindSearch._t = setTimeout(() => { if (!h.startsWith('map/')) mapView(); restore(); }, 200);
+    } else { home(); restore(); }
   });
   const mic = document.getElementById('btnMic');
   if (mic) mic.onclick = () => {
@@ -978,13 +1199,11 @@ function bindClicks() {
   }));
   app.querySelectorAll('[data-speak]').forEach(el => el.addEventListener('click', ev => {
     ev.preventDefault(); ev.stopPropagation();
-    const e = M[el.dataset.speak];
-    if (e) speak(e, speakLang, el);
+    loadDetail(el.dataset.speak).then(e => { if (e) speak(e, speakLang, el); });
   }));
   app.querySelectorAll('[data-verse]').forEach(el => el.addEventListener('click', ev => {
     ev.preventDefault(); ev.stopPropagation();
-    const e = M[el.dataset.verse];
-    if (e) verseSheet(e);
+    loadDetail(el.dataset.verse).then(e => { if (e) verseSheet(e); });
   }));
   app.querySelectorAll('[data-chip]').forEach(el => el.addEventListener('click', () => {
     chip = el.dataset.chip;
@@ -1104,7 +1323,7 @@ function shuffle(a, seed) {
   return out;
 }
 function makeQuestions() {
-  const pool = people().filter(e => e.g !== 'd' && e.m && e.hi);
+  const pool = people().filter(e => e.g !== 'd' && e.hv && e.m && e.hi);
   const seed = todayKey().split('-').reduce((a, x) => a + Number(x), 1);
   const picked = shuffle(pool, seed).slice(0, 5);
   return picked.map((e, i) => {
@@ -1233,12 +1452,15 @@ function godsView() {
 function womenView() {
   setNav('women');
   const list = women();
+  const page = paged(list);
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <h2 class="font-headline-md text-headline-md text-primary">Women of the Bible</h2>
     <p class="font-body-sm text-on-surface-variant">${list.length} women in this lexicon. Tap a name to open it.</p>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${list.map(nameCard).join('')}</div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${page.slice.map(nameCard).join('')}</div>
+    ${page.more}
   </div>`;
   bindClicks();
+  bindMore();
 }
 
 function makeCardCanvas(e, story) {
@@ -1340,17 +1562,33 @@ function cardView(id) {
 
 
 function route() {
-  mapObj = null;
-  const h = (location.hash || '#home').slice(1);
-  if (!h || h === 'home') return home();
+  const h = decodeURIComponent((location.hash || '#home').slice(1));
+  const path0 = h.split('/')[0];
+  if (!(path0 === 'people' || path0 === 'places' || path0 === 'home' || path0 === 'meanings' || (path0 === 'map' && !h.startsWith('map/')))) {
+    /* keep listLimit across show-more on the same list; reset when leaving search context handled below */
+  }
+  const resetList = !['people','places','home','women','map'].includes(path0);
+  // Reset show-more when the hash target changes type, except when only expanding.
+  // We reset in bindSearch when q/letter change; here reset when navigating to a new page type.
+  if (route._last && route._last !== h && !h.startsWith('p/') && path0 !== route._last.split('/')[0]) {
+    listLimit = 40;
+  }
+  if (route._last && route._last !== h && (path0 === 'lineage') && route._last.split('/')[0] === 'lineage') {
+    /* keep expand only if same root, already handled */
+  }
+  route._last = h;
+  if (path0 !== 'map') mapQuery = '';
   if (h === 'people') return listView('p');
   if (h === 'places') return listView('l');
-  if (h === 'map') return mapView();
-  if (h.startsWith('map/')) return mapView(h.split('/')[1]);
+  if (h === 'map' || h.startsWith('map/')) {
+    return ensureGeo().then(() => mapView(h.split('/')[1])).catch(err => { console.warn(err); mapView(h.split('/')[1]); });
+  }
   if (h === 'meanings') { chip = 'm'; return home(); }
   if (h === 'saved') return savedView();
   if (h === 'lineage' || h.startsWith('lineage/')) return lineageView(h.split('/')[1]);
-  if (h.startsWith('p/')) return detail(M[h.slice(2)]);
+  if (h.startsWith('p/')) {
+    return loadDetail(h.slice(2)).then(e => e ? detail(e) : home());
+  }
   if (h === 'more') return moreView();
   if (h === 'finder') return finderView();
   if (h === 'quiz') return quizView();
@@ -1358,8 +1596,10 @@ function route() {
   if (h === 'genealogy' || h.startsWith('genealogy/')) return genealogyView(h.split('/')[1]);
   if (h === 'gods') return godsView();
   if (h === 'women') return womenView();
-  if (h.startsWith('card/')) return cardView(h.split('/')[1]);
-  if (M[h]) return detail(M[h]);
+  if (h.startsWith('card/')) {
+    return loadDetail(h.split('/')[1]).then(e => e ? cardView(e.id) : home());
+  }
+  if (rec(h)) return loadDetail(h).then(e => e ? detail(e) : home());
   home();
 }
 
@@ -1391,9 +1631,42 @@ document.addEventListener('click', ev => {
 
 addEventListener('hashchange', route);
 
-Promise.all([fetch('names.json').then(r => r.json()), fetch('content.json').then(r => r.json())]).then(([data, content]) => {
-  D = data;
-  C = content;
-  data.forEach(e => { M[e.id] = e; });
+function ingestIndex(index) {
+  INDEX = index;
+  D = index;
+  index.forEach(e => {
+    const f = FAM[e.id] || {};
+    M[e.id] = normalize(Object.assign({}, e, {
+      g: f.g || e.g,
+      hi: f.hi || e.hi,
+      en: f.en || e.en,
+      hv: f.hv != null ? f.hv : e.hv,
+      father: f.f || e.father,
+      mother: f.m || e.mother,
+      spouse: f.p || e.spouse,
+      children: f.c || e.children,
+      siblings: f.sib || e.siblings
+    }));
+  });
+  Object.keys(ALIAS).forEach(k => {
+    if (!M[k] && M[ALIAS[k]]) M[k] = M[ALIAS[k]];
+  });
+}
+
+Promise.all([
+  fetch('data/index.json' + CACHE_V).then(r => r.json()),
+  fetch('data/alias.json' + CACHE_V).then(r => r.json()),
+  fetch('data/family.json' + CACHE_V).then(r => r.json()),
+  fetch('data/content.json' + CACHE_V).then(r => r.json()),
+  fetch('data/stats.json' + CACHE_V).then(r => r.json()).catch(() => ({}))
+]).then(([index, alias, fam, content, stats]) => {
+  ALIAS = alias || {};
+  FAM = fam || {};
+  C = content || {};
+  STATS = stats || {};
+  ingestIndex(index);
   route();
+}).catch(err => {
+  console.error(err);
+  app.innerHTML = '<p class="px-4 py-8 text-on-surface-variant">Could not load the lexicon. Please refresh.</p>';
 });
