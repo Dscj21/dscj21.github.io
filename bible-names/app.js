@@ -5,7 +5,7 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
-const CACHE_V = '?v=9';
+const CACHE_V = '?v=10';
 const people = () => D.filter(e => e.t === 'p');
 const places = () => D.filter(e => e.t === 'l');
 const uniq = arr => [...new Set((arr || []).filter(Boolean))];
@@ -410,6 +410,7 @@ function aboutSheet() {
     <p class="font-body-sm text-on-surface-variant mt-2">${esc(a.openbible || 'Some coordinates also draw on OpenBible.info Bible geocoding (CC BY).')}</p>
     <p class="font-body-sm text-on-surface-variant mt-2">${esc(a.irv || 'Hindi names and verses are from the IRV Hindi Bible. Names we could not match confidently are marked unverified and shown in English.')}</p>
     <p class="font-body-sm text-on-surface-variant mt-2">${esc(a.strongs || 'Short meanings for unmatched entries come from the public-domain Strong’s lexicon.')}</p>
+    <p class="mt-4 mb-1"><a href="privacy.html" class="font-label-md text-primary font-semibold no-underline">Privacy Policy</a></p>
     <div class="gt-yt font-label-sm font-semibold mt-4 mb-2">Our channels</div>
     ${channelsHTML()}`);
 }
@@ -1249,6 +1250,7 @@ function moreView() {
     <h2 class="font-headline-md text-headline-md text-primary px-1">Explore</h2>
     ${exploreTiles()}
     ${channelsSection()}
+    <a href="privacy.html" class="mt-2 px-1 font-label-md text-primary font-semibold no-underline">Privacy Policy</a>
   </div>`;
 }
 
