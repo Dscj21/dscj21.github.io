@@ -5,7 +5,7 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
-const CACHE_V = '?v=10';
+const CACHE_V = '?v=11';
 const people = () => D.filter(e => e.t === 'p');
 const places = () => D.filter(e => e.t === 'l');
 const uniq = arr => [...new Set((arr || []).filter(Boolean))];
@@ -150,8 +150,7 @@ function hvBadge(e) {
 }
 function meaningNote(e) {
   if (!e || !e.m) return '';
-  if (e.ms === 'strongs' || e.ms === "strong's" || e.ms === 'bdb') return '<p class="font-label-sm text-on-surface-variant mt-1">Short meaning from the public-domain Strong’s lexicon.</p>';
-  return '';
+  return '<p class="font-label-sm text-on-surface-variant mt-1">From public-domain sources (Hitchcock, Easton, Smith, Strong’s). Marked संभवतः if the sources disagree or the sense is uncertain.</p>';
 }
 function paged(list) {
   const n = list.length;
@@ -785,7 +784,7 @@ function detail(e) {
     <section class="bg-surface-container-low rounded-xl p-4 shadow-sm flex flex-col gap-2">
       <h3 class="font-headline-sm text-headline-sm font-semibold">Etymology &amp; Root Analysis</h3>
       <p class="font-body-md text-body-md">Strong's <strong>${esc(e.s)}</strong> · ${rootHint} <span class="${origCls(e)} text-primary font-semibold">${esc(e.o)}</span></p>
-      <p class="font-body-md text-body-md text-on-surface-variant">Pronounced <strong class="text-on-surface">${esc(e.pr)}</strong>. In the IRV Hindi Bible this name is written <strong class="text-on-surface">${esc(e.hi)}</strong>, meaning “${esc(e.m)}”.</p>
+      <p class="font-body-md text-body-md text-on-surface-variant">Pronounced <strong class="text-on-surface">${esc(e.pr)}</strong>. In the IRV Hindi Bible this name is written <strong class="text-on-surface">${esc(e.hi)}</strong>${e.m ? `. The name means “${esc(e.m)}”` : ''}.</p>
     </section>
 
     <section class="bg-surface-container-low rounded-xl p-4 shadow-sm flex flex-col gap-2">
