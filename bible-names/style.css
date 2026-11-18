@@ -263,3 +263,59 @@ html.has-native-banner main#app{padding-bottom:calc(6rem + var(--adh,50px) + env
 .anc-more{margin:0 0 6px}
 .sib-label,.sib-row{width:100%;justify-content:center}
 .union-kids .wife-kids{flex-wrap:wrap;flex-direction:row;justify-content:center}
+
+/* Interactive Bible map (v13) */
+body.on-map{min-height:100dvh;overflow:hidden}
+body.on-map main#app{height:100dvh;min-height:0;overflow:hidden;padding-bottom:calc(4rem + env(safe-area-inset-bottom,0px))}
+html.has-native-banner body.on-map main#app{padding-bottom:calc(4rem + var(--adh,50px) + env(safe-area-inset-bottom,0px))}
+.map-page{display:flex;flex-direction:column;height:100%;min-height:0;padding-top:6px;box-sizing:border-box}
+.map-toolbar{flex:0 0 auto;display:flex;flex-direction:column;gap:8px;padding:0 16px 8px}
+.map-stage{flex:1 1 auto;min-height:280px;position:relative;margin:0 12px;border-radius:16px;overflow:hidden;box-shadow:0 1px 6px rgba(127,44,21,.12);touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+#mapel.map-fill{position:absolute;inset:0;height:100% !important;width:100%;border-radius:0;z-index:0;touch-action:none}
+.map-chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.map-chips::-webkit-scrollbar{display:none}
+.map-chip{flex-shrink:0;padding:7px 14px;border-radius:999px;border:0;font:inherit;font-size:13px;font-weight:500;background:#f5eced;color:#56423d;cursor:pointer;text-decoration:none;line-height:1.2}
+a.map-chip{display:inline-flex;align-items:center}
+.map-chip.on{background:#7f2c15;color:#fff}
+.map-search{position:relative}
+.map-search input{width:100%;border:1px solid #dcc0ba;border-radius:999px;padding:10px 14px;font:inherit;background:#fff;color:#1e1b1c;outline:none}
+.map-search input:focus{border-color:#9e432a}
+.map-suggest{position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff8f8;border:1px solid #e3d8c8;border-radius:12px;margin-top:4px;max-height:220px;overflow:auto;box-shadow:0 4px 16px rgba(35,31,32,.12)}
+.map-sug{display:block;width:100%;text-align:left;border:0;background:none;padding:10px 12px;font:inherit;cursor:pointer}
+.map-sug span{color:#89726c;font-size:12px;margin-left:6px}
+.map-sug:hover,.map-sug:active{background:#f5eced}
+.map-sug-empty{padding:10px 12px;color:#89726c;font-size:13px}
+.map-step{position:absolute;left:10px;right:10px;bottom:10px;z-index:20;display:flex;align-items:center;gap:8px;background:rgba(255,248,248,.96);border:1px solid #e3d8c8;border-radius:999px;padding:6px;box-shadow:0 2px 10px rgba(35,31,32,.12)}
+.map-step button{flex-shrink:0;border:0;border-radius:999px;background:#9e432a;color:#fff;font:inherit;font-weight:600;font-size:13px;padding:8px 14px;cursor:pointer}
+.map-step button:disabled{opacity:.4}
+.map-step .lab{flex:1;min-width:0;font-size:13px;line-height:1.25;color:#1e1b1c}
+.map-step .lab span{color:#89726c}
+.map-note{font-size:11px;color:#89726c;padding:0 2px;margin:0}
+.home-map-card{display:block;position:relative;border-radius:16px;overflow:hidden;box-shadow:0 2px 8px rgba(127,44,21,.12);text-decoration:none;color:inherit;background:#e9e0e1}
+.home-map-card img{display:block;width:100%;height:auto;aspect-ratio:702/360;object-fit:cover}
+.home-map-cap{position:absolute;left:0;right:0;bottom:0;padding:36px 14px 12px;background:linear-gradient(transparent,rgba(35,31,32,.75));color:#fff}
+.home-map-ttl{font-family:"Noto Serif","Noto Serif Devanagari",serif;font-weight:700;font-size:18px;line-height:1.2}
+.home-map-sub{font-size:13px;opacity:.95;margin-top:2px}
+.mk-on .mk-num{background:#5c623b;transform:scale(1.12)}
+.mk-on .mk-pin{background:#5c623b}
+.ps-meaning{margin-top:10px;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:700;font-size:18px;color:#7f2c15}
+.ps-note{margin:10px 0 0;font-size:14px;line-height:1.45;color:#1e1b1c}
+.ps-ref{font-weight:600;color:#5c623b;margin-right:6px}
+.ps-sec{margin-top:12px}
+.ps-k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#89726c;font-weight:600;margin-bottom:6px}
+.ps-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ps-chip{display:inline-block;background:#f5eced;color:#7f2c15;text-decoration:none;border-radius:999px;padding:6px 10px;font-size:13px;font-weight:600}
+
+.cont-card{display:flex;flex-direction:column;gap:2px;background:#fbf1f2;border-radius:12px;padding:12px 14px;text-decoration:none;color:inherit;box-shadow:0 1px 3px rgba(127,44,21,.06)}
+.cont-card.quiz{background:#e0e7b6}
+.cont-k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:600;color:#7f2c15}
+.cont-v{font-size:15px;font-weight:600;color:#1e1b1c;font-family:"Noto Serif Devanagari","Noto Serif",serif}
+.recent-row{display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 1px 8px;scrollbar-width:none}
+.recent-row::-webkit-scrollbar{display:none}
+.recent-chip{flex-shrink:0;background:#f5eced;color:#7f2c15;text-decoration:none;border-radius:999px;padding:8px 12px;font-size:13px;font-weight:600}
+.learn-hero{display:block;background:#9e432a;color:#fff;border-radius:16px;padding:18px 16px;box-shadow:0 2px 8px rgba(127,44,21,.18)}
+.learn-hero-k{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;opacity:.9}
+.learn-hero-v{font-family:"Noto Serif","Noto Serif Devanagari",serif;font-size:18px;font-weight:700;margin-top:6px;line-height:1.3}
+.learn-hero-cta{display:inline-block;margin-top:12px;background:#fff;color:#7f2c15;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700}
+.next-name{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;background:#fff;border-radius:12px;padding:12px 14px;text-decoration:none;color:#7f2c15;font-weight:700;font-size:14px}
+.next-name span{color:#56423d;font-weight:600;font-size:13px;font-family:"Noto Serif Devanagari","Noto Serif",serif}

@@ -5,7 +5,7 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
-const CACHE_V = '?v=12';
+const CACHE_V = '?v=13';
 const people = () => D.filter(e => e.t === 'p');
 const places = () => D.filter(e => e.t === 'l');
 const uniq = arr => [...new Set((arr || []).filter(Boolean))];
@@ -76,6 +76,33 @@ let listLimit = 40;
 let TREE_EXPAND = new Set();
 let TREE_ROOT = '';
 let mapQuery = '';
+let mapCat = 'all';
+let mapStopIdx = 0;
+let PLACE_PEOPLE = {};
+let APP_STACK = [];
+
+function rememberVisit(id) {
+  if (!id) return;
+  try {
+    localStorage.setItem('hn-last', JSON.stringify({ id, at: Date.now() }));
+    const list = JSON.parse(localStorage.getItem('hn-recent') || '[]').filter(x => x !== id);
+    list.unshift(id);
+    localStorage.setItem('hn-recent', JSON.stringify(list.slice(0, 8)));
+  } catch (err) {}
+}
+function lastVisit() {
+  try { return JSON.parse(localStorage.getItem('hn-last') || 'null'); } catch (err) { return null; }
+}
+function recentIds() {
+  try { return (JSON.parse(localStorage.getItem('hn-recent') || '[]') || []).map(rec).filter(Boolean); } catch (err) { return []; }
+}
+function goBack() {
+  const prev = APP_STACK.pop();
+  if (prev != null) {
+    route._skipPush = true;
+    location.hash = prev ? '#' + prev : '#home';
+  } else location.hash = 'home';
+}
 
 const POPULAR = ['jesus', 'david', 'abraham', 'mary', 'moses', 'noah'];
 const TREES = [
@@ -97,10 +124,14 @@ const THOUGHT = {
 
 function saveFav() { localStorage.setItem('hn-fav', JSON.stringify([...fav])); }
 
+const DAY_NAMES = ['jesus','david','abraham','moses','noah','mary','solomon','joseph','joshua','ruth','esther','daniel','samuel','elijah','peter','paul','john','isaac','jacob','aaron','sarah','hannah','deborah','miriam','benjamin'];
 function dayEntry() {
-  const pool = people().filter(e => e.hv);
-  if (!pool.length) return D[0];
-  return pool[Math.floor(Date.now() / 864e5) % pool.length];
+  const seed = todayKey().split('-').reduce((a, x) => a + Number(x), 1);
+  const prefer = DAY_NAMES.map(id => rec(id)).filter(e => e && e.hv && e.m);
+  if (prefer.length) return prefer[seed % prefer.length];
+  const known = people().filter(e => e.hv && e.m && e.g !== 'd' && (e.vc || 0) >= 20);
+  const list = known.length ? known : people().filter(e => e.hv && e.m);
+  return list.length ? list[seed % list.length] : D[0];
 }
 function letterOfEntry(e) {
   const s = (e.en || '').replace(/[^A-Za-z]/g, '');
@@ -159,7 +190,7 @@ function paged(list) {
 function bindMore() {
   const btn = document.getElementById('listMore');
   if (!btn) return;
-  btn.onclick = () => { listLimit += 40; route(); };
+  btn.onclick = () => { listLimit += 40; route._keepScroll = true; route(); };
 }
 
 const MAP_ATTR = 'Tiles © Esri · © OpenStreetMap contributors';
@@ -296,9 +327,10 @@ function resolveLabels(map, items) {
     if (!moved) break;
   }
 }
-function placeDivIcon({ num, hi, en, side, labeled, compact }) {
+function placeDivIcon({ num, hi, en, side, labeled, compact, hiOnly }) {
   const badge = num != null ? `<span class="mk-num">${num}</span>` : `<span class="mk-pin"></span>`;
-  const lab = labeled === false ? '' : `<div class="mk-lab${compact ? ' wrap' : ''}"><b>${esc(hi)}</b><span>${esc(en)}</span></div>`;
+  const enLine = (!hiOnly && en) ? `<span>${esc(en)}</span>` : '';
+  const lab = labeled === false ? '' : `<div class="mk-lab${compact ? ' wrap' : ''}"><b>${esc(hi)}</b>${enLine}</div>`;
   return L.divIcon({
     className: 'bn-marker',
     html: `<div class="mk lab-${side || 'right'}">${badge}${lab}</div>`,
@@ -326,6 +358,11 @@ function speak(e, lang, btn) {
   speechSynthesis.speak(u);
 }
 
+function clipText(s, n) {
+  s = String(s || '').trim();
+  if (!s || s.length <= n) return s;
+  return s.slice(0, n).replace(/\s+\S*$/, '').replace(/[\s,;:]+$/, '') + '…';
+}
 function shareText(e) {
   return `${e.hi} (${shortEn(e)})\nमूल: ${e.o} – ${e.pr}\nअर्थ: ${e.m}\n${e.ref}: ${e.v}\n\n${location.href.split('#')[0]}#p/${e.id}`;
 }
@@ -408,13 +445,17 @@ function aboutSheet() {
 }
 
 function setNav(path) {
-  const labels = { home: 'Home', people: 'People', lineage: 'Lineage', map: 'Map', more: 'More', saved: 'Saved', detail: 'Name', finder: 'Name finder', quiz: 'Quiz', timeline: 'Timeline', genealogy: 'Genealogy', gods: 'Names of God', women: 'Women', card: 'Name card' };
-  const morePages = ['more','finder','quiz','timeline','genealogy','gods','women','card'];
+  const labels = { home: 'Home', people: 'Names', lineage: 'Family tree', map: 'Map', more: 'More', saved: 'Saved', detail: 'Name', finder: 'Name finder', learn: 'Learn', quiz: 'Quiz', timeline: 'Timeline', genealogy: 'Genealogy', gods: 'Names of God', women: 'Women', card: 'Name card', places: 'Places' };
+  const learnPages = ['learn','quiz','lineage','timeline','genealogy','gods','women'];
+  const morePages = ['more','finder','card','saved'];
+  const roots = ['home','people','map','learn','more'];
   document.getElementById('hdrSub').textContent = '• ' + (labels[path] || 'Home');
   document.querySelectorAll('.nav-tab').forEach(a => {
-    const tab = morePages.includes(path) ? 'more' : (path === 'detail' ? '' : path);
+    const tab = learnPages.includes(path) ? 'learn' : (morePages.includes(path) ? 'more' : (path === 'detail' ? '' : path));
     a.classList.toggle('on', a.dataset.path === tab);
   });
+  const back = document.getElementById('btnBack');
+  if (back) back.classList.toggle('hidden', roots.includes(path));
 }
 
 function waves() {
@@ -555,13 +596,112 @@ function filtered(base) {
   return list;
 }
 
+
+function continueBlock() {
+  const last = lastVisit();
+  const e = last && rec(last.id);
+  let quizBit = '';
+  try {
+    const S = JSON.parse(localStorage.getItem('hn-quiz') || '{}');
+    if (S.date === todayKey() && S.qs && !S.done) {
+      quizBit = `<a href="#quiz" class="cont-card quiz"><span class="cont-k">Continue quiz</span><span class="cont-v">${S.i} of ${S.qs.length} · 🔥 ${S.streak || 0}</span></a>`;
+    }
+  } catch (err) {}
+  if (!e && !quizBit) return '';
+  const nameBit = e ? `<a href="#p/${esc(e.id)}" class="cont-card"><span class="cont-k">Continue reading</span><span class="cont-v">${esc(e.hi)}${e.m ? ' · ' + esc(e.m) : ''}</span></a>` : '';
+  return `<section class="flex flex-col gap-2 pt-1">
+    <h3 class="font-headline-sm text-headline-sm font-semibold px-1">Continue</h3>
+    <div class="flex flex-col gap-2">${nameBit}${quizBit}</div>
+  </section>`;
+}
+function recentBlock() {
+  const list = recentIds().slice(0, 8);
+  if (!list.length) return '';
+  return `<section class="flex flex-col gap-2">
+    <h3 class="font-headline-sm text-headline-sm font-semibold px-1">Recently viewed</h3>
+    <div class="recent-row">${list.map(e => `<a href="#p/${esc(e.id)}" class="recent-chip">${esc(e.hi)}</a>`).join('')}</div>
+  </section>`;
+}
+function nextName(e) {
+  const key = x => (shortEn(x) || x.en || '').toLowerCase();
+  const pool = (e.t === 'l' ? D.filter(x => x.t === 'l') : people()).filter(x => x && x.id)
+    .slice()
+    .sort((a, b) => (a.en || '').localeCompare(b.en || '') || (a.id || '').localeCompare(b.id || ''));
+  if (!pool.length) return null;
+  const i = pool.findIndex(x => x.id === e.id);
+  const start = i < 0 ? 0 : i;
+  for (let k = 1; k <= pool.length; k++) {
+    const n = pool[(start + k) % pool.length];
+    if (n.id !== e.id && key(n) !== key(e) && key(n).indexOf(key(e) + ' ') !== 0) return n;
+  }
+  return pool[(start + 1) % pool.length];
+}
+function relatedLinks(e) {
+  const fam = [];
+  const add = (id) => {
+    const x = rec(id);
+    if (x && !fam.some(f => f.id === x.id) && x.id !== e.id) fam.push(x);
+  };
+  asArr(e.father).forEach(add);
+  asArr(e.mother).forEach(add);
+  asArr(e.spouse).forEach(add);
+  asArr(e.children).forEach(add);
+  asArr(e.siblings).forEach(add);
+  (PLACE_PEOPLE[e.id] || []).forEach(p => add(p.id));
+  const places = asArr(e.pl).map(rec).filter(Boolean);
+  const nxt = nextName(e);
+  if (!fam.length && !places.length && !nxt) return '';
+  const peo = fam.slice(0, 8).map(x => `<a href="#p/${esc(x.id)}" class="ps-chip">${esc(x.hi || x.en)}</a>`).join('');
+  const pla = places.slice(0, 8).map(x => `<a href="#p/${esc(x.id)}" class="ps-chip">${esc(x.hi || x.en)}</a>`).join('');
+  return `<section class="bg-surface-container-low rounded-xl p-4 shadow-sm flex flex-col gap-3">
+    <h3 class="font-headline-sm text-headline-sm font-semibold">Keep exploring</h3>
+    ${peo ? `<div><div class="ps-k">Related people</div><div class="ps-chips">${peo}</div></div>` : ''}
+    ${pla ? `<div><div class="ps-k">Related places</div><div class="ps-chips">${pla}</div></div>` : ''}
+    ${nxt && nxt.id !== e.id ? `<a href="#p/${esc(nxt.id)}" class="next-name">Next name<span>${esc(nxt.hi)} · ${esc(shortEn(nxt))}</span></a>` : ''}
+  </section>`;
+}
+function learnView() {
+  setNav('learn');
+  const S = loadQuiz();
+  const saved = [...fav].map(id => rec(id)).filter(Boolean);
+  const quizText = S.done
+    ? `You scored ${S.score} / ${S.qs.length} today.`
+    : (S.i ? `Question ${S.i + 1} of ${S.qs.length} is waiting.` : `${S.qs.length} short questions from verified names.`);
+  const quizCta = S.done ? "See today's score" : (S.i ? "Continue" : "Start");
+  const tiles = [
+    ['#lineage', 'account_tree', 'Family trees', 'Ancestors, spouses, and children'],
+    ['#timeline', 'timeline', 'Timeline', 'Adam to Jesus (approximate dates)'],
+    ['#genealogy', 'account_tree', "Jesus' genealogy", 'Matthew 1 and Luke 3'],
+    ['#gods', 'wb_sunny', 'Names of God', 'El Shaddai, Yahweh Yireh, Immanuel…'],
+    ['#women', 'diversity_1', 'Women of the Bible', 'Sarah, Ruth, Mary, Deborah…']
+  ];
+  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
+    <a href="#quiz" class="learn-hero no-underline text-inherit">
+      <div class="learn-hero-k">Daily quiz · 🔥 ${S.streak || 0} day streak</div>
+      <div class="learn-hero-v">${quizText}</div>
+      <span class="learn-hero-cta">${quizCta}</span>
+    </a>
+    ${saved.length ? `<section class="flex flex-col gap-2">
+      <div class="flex items-center justify-between px-1">
+        <h3 class="font-headline-sm font-semibold">Saved names</h3>
+        <a href="#saved" class="font-label-sm text-primary font-semibold">All (${saved.length})</a>
+      </div>
+      <div class="grid grid-cols-1 gap-3">${saved.slice(0, 4).map(nameCard).join('')}</div>
+    </section>` : ''}
+    <section class="flex flex-col gap-3">
+      <h3 class="font-headline-sm font-semibold px-1">More to study</h3>
+      <div class="feature-grid">${tiles.map(([href,ic,ttl,sub]) => `<a class="feature-tile" href="${href}"><span class="material-symbols-outlined text-primary">${ic}</span><span class="ttl">${ttl}</span><span class="sub">${sub}</span></a>`).join('')}</div>
+    </section>
+  </div>`;
+  bindClicks();
+}
+
 function home() {
   setNav('home');
   const day = dayEntry();
   const searching = !!(q.trim() || letter || (chip !== 'all'));
   const results = filtered(D);
   const pop = POPULAR.map(id => M[id]).filter(Boolean);
-  const topPlaces = ['jerusalem', 'bethlehem'].map(id => M[id]).filter(Boolean);
 
   let body = '';
   if (searching) {
@@ -584,16 +724,7 @@ function home() {
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${pop.map(nameCard).join('')}</div>
       </section>
-      <section class="flex flex-col gap-3">
-        <div class="flex items-center justify-between px-1">
-          <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-primary text-[20px]">explore</span>
-            <h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Holy Places &amp; Cities</h3>
-          </div>
-          <a class="font-label-sm text-label-sm text-primary font-semibold hover:underline" href="#map">View Map</a>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">${topPlaces.map(placeCard).join('')}</div>
-      </section>
+
       <section class="relative overflow-hidden bg-secondary-container/40 rounded-xl p-4 shadow-sm flex gap-3.5 items-start">
         <div class="w-10 h-10 rounded-full bg-secondary text-on-secondary flex items-center justify-center flex-shrink-0 shadow-sm mt-0.5">
           <span class="material-symbols-outlined text-[20px]">format_quote</span>
@@ -622,7 +753,7 @@ function home() {
           <span class="flex h-2.5 w-2.5 rounded-full bg-tertiary-container animate-pulse"></span>
           <span class="font-label-sm text-label-sm uppercase tracking-wider text-tertiary font-semibold">Daily Featured Study</span>
         </div>
-        <span class="font-label-sm text-label-sm text-on-surface-variant">Holy Name of the Day</span>
+        <span class="font-label-sm text-label-sm text-on-surface-variant">Name of the Day</span>
       </div>
       <div class="relative overflow-hidden bg-surface-container-low rounded-xl p-5 shadow-md flex flex-col gap-4">
         <div class="absolute -right-8 -bottom-8 w-40 h-40 rounded-full bg-primary-fixed/30 pointer-events-none blur-2xl"></div>
@@ -636,13 +767,13 @@ function home() {
           </div>
           <button type="button" data-verse="${day.id}" class="flex items-center px-2.5 py-1 rounded-md bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-semibold flex-shrink-0">${esc(day.ref)}</button>
         </div>
-        <div class="bg-surface-container-lowest/80 rounded-lg p-3.5 flex flex-col gap-1 shadow-sm">
+        ${day.m ? `<div class="bg-surface-container-lowest/80 rounded-lg p-3.5 flex flex-col gap-1 shadow-sm">
           <span class="font-label-sm text-label-sm text-tertiary font-semibold flex items-center gap-1">
             <span class="material-symbols-outlined text-[16px]">lightbulb</span>
-            Original Meaning
+            Meaning
           </span>
           <p class="font-body-md text-body-md text-on-surface font-medium leading-relaxed">“${esc(day.m)}”</p>
-        </div>
+        </div>` : ''}
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
           ${listenPill(day)}
           <a class="inline-flex items-center justify-end gap-1 font-label-md text-label-md text-primary font-semibold hover:underline" href="#p/${day.id}">
@@ -650,12 +781,24 @@ function home() {
             <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
           </a>
         </div>
+        <div id="dayStory">${day.v ? `<p class="font-body-sm text-on-surface leading-relaxed"><span class="font-label-sm text-tertiary font-semibold">${esc(day.ref)}</span> — ${esc(clipText(day.v, 160))}</p>` : ''}</div>
       </div>
-    </section>`}
+    </section>
+    <section class="flex flex-col gap-3">
+      ${homeMapCard()}
+    </section>
+    ${continueBlock()}${recentBlock()}`}
     ${body}
   </div>`;
   bindSearch();
   bindClicks();
+  if (day && !searching && !day.v) {
+    loadDetail(day.id).then(e => {
+      const slot = document.getElementById('dayStory');
+      if (!slot || !e || !e.v) return;
+      slot.innerHTML = `<p class="font-body-sm text-on-surface leading-relaxed"><span class="font-label-sm text-tertiary font-semibold">${esc(e.ref || '')}</span> — ${esc(clipText(e.v, 160))}</p>`;
+    });
+  }
 }
 
 function listView(kind) {
@@ -664,7 +807,7 @@ function listView(kind) {
   const list = kind === 'l' ? places() : people();
   const shown = filtered(kind === 'l' ? places() : (kind === 'm' ? D : people()));
   const page = paged(shown);
-  const title = kind === 'l' ? 'Holy Places & Cities' : kind === 'm' ? 'Meanings' : 'Biblical Names';
+  const title = kind === 'l' ? 'Holy Places & Cities' : kind === 'm' ? 'Meanings' : 'Names';
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-lg pt-space-xs">
     ${searchBox(kind === 'l' ? 'Search places in Hindi or English…' : 'Search names in Hindi or English…')}
     ${alphaStrip(list)}
@@ -726,18 +869,13 @@ function detail(e) {
   const saved = fav.has(e.id);
   const rootHint = isGk(e) ? 'Greek' : 'Hebrew';
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
-    <div class="flex items-center justify-between">
-      <button type="button" class="inline-flex items-center gap-1 text-primary font-label-md font-semibold" onclick="history.length>1?history.back():location.hash='home'">
-        <span class="material-symbols-outlined text-[20px]">arrow_back</span> Back
+    <div class="flex items-center justify-end">
+      <button type="button" id="btnFav" aria-label="Save" class="w-11 h-11 rounded-full flex items-center justify-center ${saved ? 'text-primary' : 'text-on-surface-variant'} hover:bg-surface-container">
+        <span class="material-symbols-outlined text-[22px]" style="font-variation-settings:'FILL' ${saved ? 1 : 0}">bookmark</span>
       </button>
-      <div class="flex items-center gap-1">
-        <button type="button" id="btnFav" aria-label="Save" class="w-10 h-10 rounded-full flex items-center justify-center ${saved ? 'text-primary' : 'text-on-surface-variant'} hover:bg-surface-container">
-          <span class="material-symbols-outlined text-[22px]" style="font-variation-settings:'FILL' ${saved ? 1 : 0}">bookmark</span>
-        </button>
-        <button type="button" id="btnShare" aria-label="Share" class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container">
-          <span class="material-symbols-outlined text-[22px]">share</span>
-        </button>
-      </div>
+      <button type="button" id="btnShare" aria-label="Share" class="w-11 h-11 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container">
+        <span class="material-symbols-outlined text-[22px]">share</span>
+      </button>
     </div>
 
     <section class="relative overflow-hidden bg-surface-container-low rounded-xl p-5 shadow-md flex flex-col gap-4">
@@ -787,6 +925,7 @@ function detail(e) {
     </section>
 
     ${familyBits(e)}
+    ${relatedLinks(e)}
 
     <div class="flex gap-2 flex-wrap">
       <button type="button" id="btnShare2" class="flex-1 rounded-xl bg-primary text-on-primary py-3 font-label-lg font-semibold">Share</button>
@@ -795,6 +934,7 @@ function detail(e) {
     </div>
   </div>`;
 
+  rememberVisit(e.id);
   bindClicks();
   document.getElementById('btnFav').onclick = () => {
     if (fav.has(e.id)) fav.delete(e.id); else fav.add(e.id);
@@ -803,7 +943,7 @@ function detail(e) {
   };
   document.getElementById('btnShare').onclick = () => doShare(e);
   document.getElementById('btnShare2').onclick = () => doShare(e);
-  document.getElementById('btnWa').onclick = () => open('https://wa.me/?text=' + encodeURIComponent(shareText(e)));
+  document.getElementById('btnWa').onclick = () => { const u = 'https://wa.me/?text=' + encodeURIComponent(shareText(e)); if (window.Capacitor && window.openExt) openExt(u); else window.open(u, '_blank'); };
   document.getElementById('btnCard').onclick = () => { location.hash = 'card/' + e.id; };
   app.querySelectorAll('.lang-btn').forEach(b => b.onclick = () => { speakLang = b.dataset.lang; detail(e); });
   mountMiniMap(e);
@@ -1045,61 +1185,369 @@ function lineageView(rootId) {
   };
 }
 
+const CANAAN_BOUNDS = [[29.45, 34.18], [33.72, 36.55]];
+const FAMOUS_KEYS = [
+  'jerusalem', 'bethlehem', 'nazareth', 'capernaum', 'hebron', 'bethel',
+  'jericho', 'shechem', 'beersheba', 'gaza', 'joppa', 'caesarea', 'tyre',
+  'sidon', 'damascus', 'galilee', 'samaria', 'zion', 'jordan', 'moab',
+  'edom', 'gilead', 'canaan', 'lebanon', 'megiddo', 'shiloh', 'gilgal',
+  'egypt', 'mount_sinai_855', 'sea_of_galilee_1032', 'mount_of_olives_861',
+  'bethany', 'ai'
+];
+const MAP_CATS = [
+  ['all', 'All'],
+  ['famous', 'Famous places'],
+  ['city', 'Cities'],
+  ['mountain', 'Mountains'],
+  ['water', 'Rivers / Seas'],
+  ['region', 'Regions']
+];
+
+function inCanaan(ll) {
+  return ll && ll[0] >= 29.2 && ll[0] <= 33.9 && ll[1] >= 33.9 && ll[1] <= 36.7;
+}
+function placeCat(e) {
+  const ft = String(e.ft || '').toLowerCase();
+  if (ft === 'city') return 'city';
+  if (ft === 'mountain') return 'mountain';
+  if (ft === 'water') return 'water';
+  if (ft === 'region' || ft === 'valley' || ft === 'island') return 'region';
+  const en = (e.en || '').toLowerCase();
+  if (/\b(mount|mountain|hill)\b/.test(en)) return 'mountain';
+  if (/\b(sea|river|brook|well|fountain|pool)\b/.test(en)) return 'water';
+  return 'other';
+}
+function geoPlaces() {
+  return (GEO || []).map(g => {
+    const e = rec(g.id) || {};
+    return {
+      id: g.id,
+      hi: e.hi || g.hi,
+      en: e.en || g.en,
+      ll: g.ll,
+      m: e.m || '',
+      ft: e.ft || '',
+      vc: e.vc || 0,
+      hv: e.hv,
+      ref: e.ref,
+      v: e.v
+    };
+  }).filter(p => p.ll && p.ll.length === 2);
+}
+function topByMentions(list, n) {
+  return list.slice().sort((a, b) => (b.vc || 0) - (a.vc || 0) || (a.en || '').localeCompare(b.en || '')).slice(0, n);
+}
+function famousPlaces() {
+  const seen = new Set();
+  const out = [];
+  FAMOUS_KEYS.forEach(k => {
+    const e = rec(k);
+    const id = (e && e.id) || k;
+    const g = (GEO || []).find(x => x.id === id);
+    const ll = (e && e.ll) || (g && g.ll);
+    if (!ll) return;
+    if (seen.has(id)) return;
+    seen.add(id);
+    out.push({
+      id,
+      hi: (e && e.hi) || (g && g.hi),
+      en: (e && e.en) || (g && g.en),
+      ll,
+      m: e && e.m,
+      vc: (e && e.vc) || 0,
+      ft: e && e.ft,
+      hv: e && e.hv
+    });
+  });
+  return out;
+}
+function filterPlaces(list, cat) {
+  if (cat === 'all') return list;
+  if (cat === 'famous') {
+    const ids = new Set(famousPlaces().map(p => p.id));
+    topByMentions(list, 60).forEach(p => ids.add(p.id));
+    return list.filter(p => ids.has(p.id)).sort((a, b) => (b.vc || 0) - (a.vc || 0));
+  }
+  return list.filter(p => placeCat(p) === cat);
+}
+function priorityPlaces(list) {
+  const local = list.filter(p => inCanaan(p.ll));
+  const top = topByMentions(local, 56);
+  const fam = famousPlaces().filter(p => inCanaan(p.ll) && list.some(x => x.id === p.id));
+  const seen = new Set();
+  const out = [];
+  fam.concat(top).forEach(p => {
+    if (seen.has(p.id)) return;
+    seen.add(p.id);
+    out.push(p);
+  });
+  return out.slice(0, 60);
+}
+function lockMapGestures(m) {
+  const el = m.getContainer();
+  el.style.touchAction = 'none';
+  L.DomEvent.on(el, 'touchmove', L.DomEvent.stopPropagation);
+  L.DomEvent.on(el, 'wheel', L.DomEvent.stopPropagation);
+}
+function densify(latlngs, nPerSeg) {
+  nPerSeg = nPerSeg || 16;
+  const pts = [];
+  for (let i = 0; i < latlngs.length - 1; i++) {
+    const a = latlngs[i], b = latlngs[i + 1];
+    for (let k = 0; k < nPerSeg; k++) {
+      const t = k / nPerSeg;
+      pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+  }
+  pts.push(latlngs[latlngs.length - 1]);
+  return pts;
+}
+function animateRoute(line, latlngs, token) {
+  const pts = densify(latlngs, 18);
+  line.setLatLngs([pts[0]]);
+  return new Promise(resolve => {
+    let i = 1;
+    const tick = () => {
+      if (token && token.dead) return resolve();
+      const step = Math.min(pts.length, i + 4);
+      while (i < step) { line.addLatLng(pts[i]); i++; }
+      if (i >= pts.length) return resolve();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+async function placeSheet(id) {
+  const e = (await loadDetail(id)) || rec(id);
+  if (!e) return;
+  const people = (PLACE_PEOPLE[e.id] || []).slice(0, 5);
+  const journeys = (C.journeys || []).filter(j => (j.stops || []).some(s => s.id === e.id));
+  const meaning = e.m ? `<div class="ps-meaning">${esc(e.m)}</div>` : '';
+  const note = e.v
+    ? `<p class="ps-note"><span class="ps-ref">${esc(e.ref || '')}</span>${esc(clipText(e.v, 180))}</p>`
+    : (e.ref ? `<p class="ps-note"><span class="ps-ref">${esc(e.ref)}</span></p>` : '');
+  const peo = people.length
+    ? `<div class="ps-sec"><div class="ps-k">Key people</div><div class="ps-chips">${people.map(p => `<a href="#p/${esc(p.id)}" class="ps-chip">${esc(p.hi || p.en)}</a>`).join('')}</div></div>`
+    : '';
+  const jou = journeys.length
+    ? `<div class="ps-sec"><div class="ps-k">Journeys</div><div class="ps-chips">${journeys.map(j => `<a href="#map/${esc(j.id)}" class="ps-chip">${esc(JOURNEY_LAB[j.id] || j.hi || j.id)}</a>`).join('')}</div></div>`
+    : '';
+  openSheet(`
+    <button type="button" class="text-primary font-label-md mb-2" onclick="closeSheet()">Close</button>
+    <div class="font-headline-sm text-headline-sm text-primary">${esc(e.hi)}</div>
+    <div class="font-label-md text-on-surface-variant">${esc(shortEn(e))}${e.ft ? ' · ' + esc(e.ft) : ''}</div>
+    ${meaning}
+    ${note}
+    ${peo}
+    ${jou}
+    <button type="button" class="mt-4 w-full rounded-xl bg-primary text-on-primary py-3 font-label-lg font-semibold" id="psOpen">Open page</button>`);
+  const btn = document.getElementById('psOpen');
+  if (btn) btn.onclick = () => { closeSheet(); location.hash = 'p/' + e.id; };
+  sheetEl.querySelectorAll('a.ps-chip').forEach(a => {
+    a.addEventListener('click', () => closeSheet());
+  });
+}
+
+function flyToPlace(m, id, list) {
+  const p = (list || geoPlaces()).find(x => x.id === id) || rec(id);
+  const sug = document.getElementById('mapSuggest');
+  if (sug) sug.classList.add('hidden');
+  if (!p || !p.ll) { placeSheet(id); return; }
+  m.flyTo(p.ll, Math.max(m.getZoom(), 11), { duration: 0.7 });
+  placeSheet(id);
+}
+
+function bindMapSearch(m, list) {
+  const input = document.getElementById('mapq');
+  const box = document.getElementById('mapSuggest');
+  if (!input || !box) return;
+  const run = qv => {
+    const qq = (qv || '').trim().toLowerCase();
+    if (!qq) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    const hits = list.filter(p => matchQuery(p, qq)).sort((a, b) => (b.vc || 0) - (a.vc || 0)).slice(0, 8);
+    if (!hits.length) {
+      box.classList.remove('hidden');
+      box.innerHTML = '<div class="map-sug-empty">No place found</div>';
+      return;
+    }
+    box.classList.remove('hidden');
+    box.innerHTML = hits.map(p => `<button type="button" class="map-sug" data-pid="${esc(p.id)}">${esc(p.hi)} <span>${esc(p.en)}</span></button>`).join('');
+    box.querySelectorAll('[data-pid]').forEach(btn => {
+      btn.onclick = () => flyToPlace(m, btn.dataset.pid, list);
+    });
+  };
+  input.addEventListener('input', () => run(input.value));
+  input.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      const first = box.querySelector('[data-pid]');
+      if (first) flyToPlace(m, first.dataset.pid, list);
+    }
+    if (ev.key === 'Escape') box.classList.add('hidden');
+  });
+}
+
+function clearPlaceLayers(m) {
+  if (m._pri) { m.removeLayer(m._pri); m._pri = null; }
+  if (m._rest) { m.removeLayer(m._rest); m._rest = null; }
+  m._stopMarks = null;
+}
+
+function paintPlaces(m) {
+  const all = filterPlaces(geoPlaces(), mapCat);
+  const priority = priorityPlaces(all);
+  const priIds = new Set(priority.map(p => p.id));
+  const z = m.getZoom();
+  const labelN = z < 7.5 ? 14 : z < 8.5 ? 24 : z < 9.5 ? 36 : 50;
+  const hiOnly = z < 9;
+  clearPlaceLayers(m);
+  const pri = L.layerGroup();
+  const marks = [];
+  priority.forEach((p, i) => {
+    const labeled = i < labelN;
+    const hi = shortMapName(p.hi), en = shortMapName(p.en);
+    const mk = L.marker(p.ll, {
+      icon: placeDivIcon({ hi, en: hiOnly ? '' : en, side: i % 2 ? 'left' : 'right', labeled, compact: hi.length > 8 }),
+      zIndexOffset: 500 + (p.vc || 0),
+      title: (p.hi || '') + ' / ' + (p.en || '')
+    });
+    mk.on('click', () => placeSheet(p.id));
+    pri.addLayer(mk);
+    marks.push({ mk, ll: p.ll, hi, en: hiOnly ? '' : en, side: i % 2 ? 'left' : 'right', labeled, compact: hi.length > 8, num: null });
+  });
+  pri.addTo(m);
+  m._pri = pri;
+  m._stopMarks = marks;
+  const b = m.getBounds().pad(0.2);
+  let restList = all.filter(p => !priIds.has(p.id) && b.contains(L.latLng(p.ll)));
+  if (z < 8) restList = restList.filter(p => (p.vc || 0) >= 8);
+  else if (z < 9) restList = restList.filter(p => (p.vc || 0) >= 3);
+  const cluster = (L.markerClusterGroup ? L.markerClusterGroup({
+    maxClusterRadius: 26,
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: true,
+    disableClusteringAtZoom: 11,
+    zoomToBoundsOnClick: true
+  }) : L.layerGroup());
+  const dot = L.divIcon({ className: 'place-dot', html: '<span></span>', iconSize: [14, 14], iconAnchor: [7, 7] });
+  restList.forEach(p => {
+    const mk = L.marker(p.ll, { icon: dot, title: (p.hi || '') + ' / ' + (p.en || '') });
+    mk.on('click', () => placeSheet(p.id));
+    cluster.addLayer(mk);
+  });
+  m.addLayer(cluster);
+  m._rest = cluster;
+  const layout = () => { if (m._stopMarks) resolveLabels(m, m._stopMarks); };
+  requestAnimationFrame(layout);
+}
+
+function bindJourneyStepper(m, j, stopMarks) {
+  mapStopIdx = 0;
+  const label = document.getElementById('mapStopLabel');
+  const prev = document.getElementById('mapPrev');
+  const next = document.getElementById('mapNext');
+  const go = (i, fly) => {
+    mapStopIdx = Math.max(0, Math.min(j.stops.length - 1, i));
+    const s = j.stops[mapStopIdx];
+    if (label) label.innerHTML = `<b>${mapStopIdx + 1}/${j.stops.length}</b> ${esc(s.hi)} <span>(${esc(s.n)})</span>`;
+    if (prev) prev.disabled = mapStopIdx === 0;
+    if (next) next.disabled = mapStopIdx === j.stops.length - 1;
+    stopMarks.forEach((it, k) => {
+      const el = it.mk.getElement();
+      if (el) el.classList.toggle('mk-on', k === mapStopIdx);
+    });
+    if (fly) m.flyTo(s.ll, Math.max(m.getZoom(), 9), { duration: 0.7 });
+  };
+  if (prev) prev.onclick = () => go(mapStopIdx - 1, true);
+  if (next) next.onclick = () => go(mapStopIdx + 1, true);
+  stopMarks.forEach((it, i) => it.mk.on('click', () => {
+    go(i, true);
+    if (j.stops[i].id) placeSheet(j.stops[i].id);
+  }));
+  go(0, false);
+}
+
+function homeMapCard() {
+  const nPlaces = (STATS.placesWithCoords || STATS.places || 1271).toLocaleString('en-IN');
+  const nJ = (C.journeys || []).length || 8;
+  return `<a href="#map" class="home-map-card" aria-label="Open the Bible map">
+    <img src="images/home-map.png${CACHE_V}" width="702" height="360" alt="Map of Bible places in Israel and Canaan"/>
+    <div class="home-map-cap">
+      <div class="home-map-ttl">Bible Map</div>
+      <div class="home-map-sub">${nPlaces} places · ${nJ} journeys</div>
+    </div>
+  </a>`;
+}
+
 function mapView(journeyId) {
   setNav('map');
+  document.body.classList.add('on-map');
   const journeys = C.journeys || [];
   const j = journeys.find(x => x.id === journeyId);
   const tabs = [['', 'Places']].concat(journeys.map(x => [x.id, JOURNEY_LAB[x.id] || x.title || x.id]));
-  const geo = GEO || [];
-  const mq = (mapQuery || '').trim().toLowerCase();
-  const matched = mq ? geo.filter(e => matchQuery(e, mq)) : geo;
-  const page = paged(matched.map(g => rec(g.id) || g).filter(Boolean));
-  app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
-    <h2 class="font-headline-md text-headline-md text-primary">${j ? esc(j.hi) : 'Holy Places &amp; Cities'}</h2>
-    <div class="flex gap-2 overflow-x-auto no-scrollbar">${tabs.map(([id,lab]) => `<a href="${id?'#map/'+id:'#map'}" class="flex-shrink-0 px-3.5 py-2 rounded-full font-label-md no-underline ${(!j && !id) || (j && j.id===id)?'bg-primary text-on-primary':'bg-surface-container text-on-surface-variant'}">${esc(lab)}</a>`).join('')}</div>
-    ${j ? (j.note ? `<p class="font-body-sm text-on-surface-variant">${esc(j.note)}</p>` : (j.approx ? '<p class="font-body-sm text-on-surface-variant">Approximate / traditional route. The exact path is debated.</p>' : '')) : searchBox('Search places…')}
-    <div id="mapel" class="map-lg shadow-sm"></div>
-    <div class="map-legend" id="mapLegend"></div>
-    <div id="placeInfo"></div>
-    ${j ? `<ol class="font-body-md list-decimal ps-5">${j.stops.map(s=>`<li class="mb-1"><strong>${esc(s.hi)}</strong> <span class="text-on-surface-variant">(${esc(s.n)})</span></li>`).join('')}</ol>` : `<p class="font-label-sm text-on-surface-variant px-1">${matched.length} places with map coordinates</p><div class="grid grid-cols-1 gap-3.5">${page.slice.map(placeCard).join('')}</div>${page.more}`}
+  const fam = famousPlaces().filter(p => p.ll).slice(0, 14);
+  const catChips = MAP_CATS.map(([id, lab]) =>
+    `<button type="button" class="map-chip${mapCat === id ? ' on' : ''}" data-mcat="${id}">${esc(lab)}</button>`
+  ).join('');
+  const journeyNote = j
+    ? (j.note || (j.approx ? 'Approximate / traditional route. The exact path is debated.' : ''))
+    : '';
+  app.innerHTML = `<div class="map-page">
+    <div class="map-toolbar">
+      <div class="map-chips">${tabs.map(([id, lab]) => `<a href="${id ? '#map/' + id : '#map'}" class="map-chip${(!j && !id) || (j && j.id === id) ? ' on' : ''}">${esc(lab)}</a>`).join('')}</div>
+      ${j ? (journeyNote ? `<p class="map-note">${esc(journeyNote)}</p>` : '') : `
+        <div class="map-chips" id="mapCats">${catChips}</div>
+        <div class="map-search">
+          <input id="mapq" type="search" placeholder="Search a place…" autocomplete="off" enterkeyhint="search"/>
+          <div id="mapSuggest" class="map-suggest hidden"></div>
+        </div>
+        <div class="map-chips" id="mapFamous">${fam.map(p => `<button type="button" class="map-chip" data-fly="${esc(p.id)}">${esc(p.hi || p.en)}</button>`).join('')}</div>
+      `}
+    </div>
+    <div class="map-stage">
+      <div id="mapel" class="map-fill"></div>
+      ${j ? `<div class="map-step">
+        <button type="button" id="mapPrev">Prev</button>
+        <div class="lab" id="mapStopLabel"></div>
+        <button type="button" id="mapNext">Next</button>
+      </div>` : ''}
+    </div>
   </div>`;
-  if (!j) {
-    const box = app.querySelector('#q');
-    if (box) box.value = mapQuery;
-    bindSearch();
-    const qi = document.getElementById('q');
-    if (qi) {
-      qi.oninput = ev => { mapQuery = ev.target.value; listLimit = 40; /* don't rerender whole map on each key — filter on enter/search bind */ };
-    }
-    bindClicks();
-    bindMore();
-  }
+
   const go = () => {
     if (!window.L) return setTimeout(go, 200);
-    if (mapObj) { try { mapObj.remove(); } catch (err) {} mapObj = null; mapCluster = null; }
+    if (mapObj) { try { mapObj._dead = true; mapObj.remove(); } catch (err) {} mapObj = null; mapCluster = null; }
     const el = document.getElementById('mapel');
     if (!el) return;
-    const m = L.map('mapel', { scrollWheelZoom: true });
+    const m = L.map('mapel', {
+      scrollWheelZoom: true,
+      dragging: true,
+      bounceAtZoomLimits: false,
+      zoomSnap: 0.25,
+      zoomDelta: 0.5,
+      attributionControl: true
+    });
     m.attributionControl.setPrefix('Leaflet');
     addBaseMap(m);
+    lockMapGestures(m);
     mapObj = m;
-    const legend = document.getElementById('mapLegend');
+    m._dead = false;
     if (j) {
       const latlngs = j.stops.map(s => s.ll);
-      const line = L.polyline(latlngs, { color: '#9e432a', weight: 4, opacity: 0.9 }).addTo(m);
-      addArrows(m, latlngs);
+      const line = L.polyline([latlngs[0]], { color: '#9e432a', weight: 4, opacity: 0.9 }).addTo(m);
       const sides = labelSides(j.stops);
       const stopMarks = j.stops.map((s, i) => {
         const hi = shortMapName(s.hi), en = shortMapName(s.n);
         const mk = L.marker(s.ll, {
           icon: placeDivIcon({ num: i + 1, hi, en, side: sides[i] }),
           zIndexOffset: 400 + i
-        }).addTo(m).bindPopup(`<strong>${i + 1}. ${esc(s.hi)}</strong><br>${esc(s.n)}`);
-        if (s.id) mk.on('click', () => { /* popup only */ });
+        }).addTo(m);
         return { mk, ll: s.ll, num: i + 1, hi, en, side: sides[i] };
       });
-      m.fitBounds(line.getBounds(), { padding: [40, 48] });
+      m.fitBounds(L.latLngBounds(latlngs), { padding: [48, 56], maxZoom: 9, animate: false });
       const layoutStops = () => {
+        if (m._dead) return;
         const pts = stopMarks.map(it => m.latLngToLayerPoint(it.ll));
         for (let i = 0; i < pts.length; i++) {
           for (let k = i + 1; k < pts.length; k++) {
@@ -1116,40 +1564,35 @@ function mapView(journeyId) {
         resolveLabels(m, stopMarks);
       };
       layoutStops();
-      m.on('zoomend', layoutStops);
-      if (legend) legend.innerHTML = `
-        <div class="leg-item"><span class="leg-num">1</span> Stop (Hindi + English)</div>
-        <div class="leg-item"><span class="leg-line"></span> Route</div>
-        <div class="leg-item"><span class="leg-arrow"></span> Direction of travel</div>
-        ${j.approx ? '<p class="leg-note">Approximate / traditional route. The exact path is debated.</p>' : ''}`;
+      m.on('zoomend moveend', layoutStops);
+      bindJourneyStepper(m, j, stopMarks);
+      animateRoute(line, latlngs, m).then(() => { if (!m._dead) addArrows(m, latlngs); });
     } else {
-      const dot = L.divIcon({ className: 'place-dot', html: '<span></span>', iconSize: [14, 14], iconAnchor: [7, 7] });
-      const cluster = (L.markerClusterGroup ? L.markerClusterGroup({
-        maxClusterRadius: 48,
-        showCoverageOnHover: false,
-        spiderfyOnMaxZoom: true,
-        disableClusteringAtZoom: 10
-      }) : L.layerGroup());
-      mapCluster = cluster;
-      const bounds = [];
-      matched.forEach(g => {
-        if (!g.ll) return;
-        const mk = L.marker(g.ll, { icon: dot, title: (g.hi || '') + ' / ' + (g.en || '') });
-        mk.on('click', () => { location.hash = 'p/' + g.id; });
-        cluster.addLayer(mk);
-        bounds.push(g.ll);
+      m.fitBounds(CANAAN_BOUNDS, { padding: [12, 12], maxZoom: 8.25, animate: false });
+      paintPlaces(m);
+      let t;
+      m.on('zoomend moveend', () => {
+        if (m._dead) return;
+        clearTimeout(t);
+        t = setTimeout(() => { if (!m._dead) paintPlaces(m); }, 180);
       });
-      m.addLayer(cluster);
-      if (bounds.length) m.fitBounds(bounds, { padding: [24, 24], maxZoom: 6 });
-      else m.setView([31.8, 35.2], 6);
-      if (legend) legend.innerHTML = `
-        <div class="leg-item"><span class="leg-dot"></span> Place (tap for the Hindi name and verses)</div>
-        <div class="leg-item">Clusters show how many places are in that area. Zoom or tap a cluster to spread them.</div>`;
+      bindMapSearch(m, geoPlaces());
+      app.querySelectorAll('[data-mcat]').forEach(btn => {
+        btn.onclick = () => {
+          mapCat = btn.dataset.mcat;
+          app.querySelectorAll('[data-mcat]').forEach(x => x.classList.toggle('on', x.dataset.mcat === mapCat));
+          paintPlaces(m);
+        };
+      });
+      app.querySelectorAll('[data-fly]').forEach(btn => {
+        btn.onclick = () => flyToPlace(m, btn.dataset.fly, geoPlaces());
+      });
     }
-    setTimeout(() => m.invalidateSize(), 80);
+    setTimeout(() => { if (!m._dead) m.invalidateSize(); }, 80);
   };
   go();
 }
+
 
 function bindSearch() {
   const box = document.getElementById('q');
@@ -1170,8 +1613,6 @@ function bindSearch() {
     else if (h === 'places') { listView('l'); restore(); }
     else if (h === 'map' || h.startsWith('map/')) {
       mapQuery = q;
-      clearTimeout(bindSearch._t);
-      bindSearch._t = setTimeout(() => { if (!h.startsWith('map/')) mapView(); restore(); }, 200);
     } else { home(); restore(); }
   });
   const mic = document.getElementById('btnMic');
@@ -1316,16 +1757,59 @@ function shuffle(a, seed) {
   }
   return out;
 }
-function makeQuestions() {
-  const pool = people().filter(e => e.g !== 'd' && e.hv && e.m && e.hi);
-  const seed = todayKey().split('-').reduce((a, x) => a + Number(x), 1);
-  const picked = shuffle(pool, seed).slice(0, 5);
-  return picked.map((e, i) => {
-    const type = i % 2 === 0 ? 'name' : 'meaning';
-    const opts = shuffle([e, ...shuffle(pool.filter(x => x.id !== e.id), seed + i + 3).slice(0, 3)], seed + i * 9);
-    return { id: e.id, type, opts: opts.map(x => x.id) };
-  });
+function fatherOf(e) {
+  return asArr(e && e.father).map(rec).find(x => x && x.hv && x.hi);
 }
+function makeQuestions() {
+  const verified = people().filter(e => e.g !== 'd' && e.hv && e.m && e.hi);
+  const known = verified.filter(e => (e.vc || 0) >= 8);
+  const all = known.length >= 24 ? known : verified;
+  const famAll = people().filter(e => e.g !== 'd' && e.hv && e.hi && fatherOf(e));
+  const fam = famAll.filter(e => (e.vc || 0) >= 5);
+  const famSrc = fam.length >= 6 ? fam : famAll;
+  const seed = todayKey().split('-').reduce((a, x) => a + Number(x), 1);
+  const names = shuffle(all, seed);
+  const dads = shuffle(famSrc, seed + 19);
+  const used = new Set();
+  const qs = [];
+  const optionNames = (e, n) => shuffle(all.filter(x => x.id !== e.id), seed + qs.length * 7 + 3).slice(0, n);
+  const pushNameQ = type => {
+    const e = names.find(x => !used.has(x.id));
+    if (!e) return false;
+    used.add(e.id);
+    const others = optionNames(e, 3);
+    if (others.length < 3) return false;
+    qs.push({ id: e.id, type, opts: shuffle([e, ...others], seed + qs.length * 9).map(x => x.id) });
+    return true;
+  };
+  const pushFatherQ = () => {
+    const e = dads.find(x => !used.has(x.id));
+    const dad = e && fatherOf(e);
+    if (!dad) return pushNameQ('name');
+    used.add(e.id);
+    const uniq = [];
+    dads.forEach(x => {
+      const f = fatherOf(x);
+      if (f && f.id !== dad.id && !uniq.some(u => u.id === f.id)) uniq.push(f);
+    });
+    let others = shuffle(uniq, seed + qs.length * 5).slice(0, 3);
+    if (others.length < 3) {
+      const extra = all.filter(x => x.id !== dad.id && !others.some(o => o.id === x.id) && x.id !== e.id);
+      others = others.concat(shuffle(extra, seed + 11).slice(0, 3 - others.length));
+    }
+    if (others.length < 3) return pushNameQ('name');
+    qs.push({ id: e.id, type: 'father', fatherId: dad.id, opts: shuffle([dad, ...others], seed + qs.length * 9).map(x => x.id) });
+    return true;
+  };
+  pushNameQ('meaning');
+  pushNameQ('name');
+  pushFatherQ();
+  pushNameQ('meaning');
+  pushNameQ('name');
+  while (qs.length < 5) { if (!pushNameQ(qs.length % 2 ? 'name' : 'meaning')) break; }
+  return qs.slice(0, 5);
+}
+
 function loadQuiz() {
   const raw = JSON.parse(localStorage.getItem('hn-quiz') || '{}');
   if (raw.date === todayKey() && raw.qs) return raw;
@@ -1356,8 +1840,11 @@ function quizView() {
   const ans = M[q.id];
   const prompt = q.type === 'name'
     ? `Whose name means “${esc(ans.m)}”?`
-    : `What is the meaning of ${esc(ans.hi)} (${esc(shortEn(ans))})?`;
-  const label = o => q.type === 'name' ? `${o.hi} (${shortEn(o)})` : `“${o.m}”`;
+    : q.type === 'father'
+      ? `Who is the father of ${esc(ans.hi)} (${esc(shortEn(ans))})?`
+      : `What is the meaning of ${esc(ans.hi)} (${esc(shortEn(ans))})?`;
+  const label = o => (q.type === 'meaning') ? `“${o.m}”` : `${o.hi} (${shortEn(o)})`;
+  const correctId = q.type === 'father' ? q.fatherId : q.id;
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <div class="flex items-center justify-between">
       <h2 class="font-headline-md text-headline-md text-primary">Daily quiz</h2>
@@ -1371,10 +1858,10 @@ function quizView() {
   app.querySelectorAll('[data-opt]').forEach(b => b.onclick = () => {
     if (S.picked) return;
     S.picked = b.dataset.opt;
-    const ok = S.picked === q.id;
+    const ok = S.picked === correctId;
     if (ok) S.score++;
     app.querySelectorAll('[data-opt]').forEach(x => {
-      if (x.dataset.opt === q.id) x.classList.add('ok');
+      if (x.dataset.opt === correctId) x.classList.add('ok');
       else if (x.dataset.opt === S.picked) x.classList.add('bad');
     });
     S.i++;
@@ -1555,6 +2042,9 @@ function cardView(id) {
 
 
 function route() {
+  if (typeof closeSheet === 'function') closeSheet();
+  if (!route._keepScroll) scrollTo(0, 0);
+  route._keepScroll = false;
   const h = decodeURIComponent((location.hash || '#home').slice(1));
   const path0 = h.split('/')[0];
   if (!(path0 === 'people' || path0 === 'places' || path0 === 'home' || path0 === 'meanings' || (path0 === 'map' && !h.startsWith('map/')))) {
@@ -1570,7 +2060,12 @@ function route() {
     /* keep expand only if same root, already handled */
   }
   route._last = h;
-  if (path0 !== 'map') mapQuery = '';
+  if (path0 !== 'map') { mapQuery = ''; document.body.classList.remove('on-map'); }
+  if (!route._skipPush && route._last && route._last !== h) {
+    APP_STACK.push(route._last);
+    if (APP_STACK.length > 50) APP_STACK.shift();
+  }
+  route._skipPush = false;
   if (h === 'people') return listView('p');
   if (h === 'places') return listView('l');
   if (h === 'map' || h.startsWith('map/')) {
@@ -1582,6 +2077,7 @@ function route() {
   if (h.startsWith('p/')) {
     return loadDetail(h.slice(2)).then(e => e ? detail(e) : home());
   }
+  if (h === 'learn') return learnView();
   if (h === 'more') return moreView();
   if (h === 'finder') return finderView();
   if (h === 'quiz') return quizView();
@@ -1613,6 +2109,9 @@ document.getElementById('btnSearch').onclick = () => {
 };
 document.getElementById('btnSaved').onclick = () => { location.hash = 'saved'; };
 document.getElementById('btnAbout').onclick = aboutSheet;
+const btnBack = document.getElementById('btnBack');
+if (btnBack) btnBack.onclick = goBack;
+window.goBack = goBack;
 
 window.closeSheet = closeSheet;
 document.addEventListener('click', ev => {
@@ -1651,12 +2150,14 @@ Promise.all([
   fetch('data/alias.json' + CACHE_V).then(r => r.json()),
   fetch('data/family.json' + CACHE_V).then(r => r.json()),
   fetch('data/content.json' + CACHE_V).then(r => r.json()),
-  fetch('data/stats.json' + CACHE_V).then(r => r.json()).catch(() => ({}))
-]).then(([index, alias, fam, content, stats]) => {
+  fetch('data/stats.json' + CACHE_V).then(r => r.json()).catch(() => ({})),
+  fetch('data/place-people.json' + CACHE_V).then(r => r.ok ? r.json() : {}).catch(() => ({}))
+]).then(([index, alias, fam, content, stats, placePeople]) => {
   ALIAS = alias || {};
   FAM = fam || {};
   C = content || {};
   STATS = stats || {};
+  PLACE_PEOPLE = placePeople || {};
   ingestIndex(index);
   route();
 }).catch(err => {
