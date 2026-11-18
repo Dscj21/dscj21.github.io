@@ -5,7 +5,7 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
-const CACHE_V = '?v=11';
+const CACHE_V = '?v=12';
 const people = () => D.filter(e => e.t === 'p');
 const places = () => D.filter(e => e.t === 'l');
 const uniq = arr => [...new Set((arr || []).filter(Boolean))];
@@ -147,10 +147,6 @@ async function ensureGeo() {
 }
 function hvBadge(e) {
   return e && e.hv === false ? '<span class="hv-badge">Unverified Hindi</span>' : '';
-}
-function meaningNote(e) {
-  if (!e || !e.m) return '';
-  return '<p class="font-label-sm text-on-surface-variant mt-1">From public-domain sources (Hitchcock, Easton, Smith, Strong’s). Marked संभवतः if the sources disagree or the sense is uncertain.</p>';
 }
 function paged(list) {
   const n = list.length;
@@ -405,10 +401,7 @@ function aboutSheet() {
     <p class="font-body-md text-body-md text-on-surface-variant">A lexicon of Bible names and places for Hindi-speaking Christians. Each entry shows the IRV Hindi spelling when we could verify it, the original Hebrew or Greek, a Devanagari pronunciation, and a simple Hindi meaning.</p>
     <p class="font-body-sm text-body-sm text-on-surface-variant mt-3">${nP} people · ${nL} places.${cov}</p>
     <h3 class="font-headline-sm text-primary mt-4 mb-1">Sources</h3>
-    <p class="font-body-sm text-on-surface-variant">${esc(a.theographic || 'People, family relationships, and places (including many coordinates) are from Theographic Bible Metadata (CC BY-SA 4.0).')}</p>
-    <p class="font-body-sm text-on-surface-variant mt-2">${esc(a.openbible || 'Some coordinates also draw on OpenBible.info Bible geocoding (CC BY).')}</p>
-    <p class="font-body-sm text-on-surface-variant mt-2">${esc(a.irv || 'Hindi names and verses are from the IRV Hindi Bible. Names we could not match confidently are marked unverified and shown in English.')}</p>
-    <p class="font-body-sm text-on-surface-variant mt-2">${esc(a.strongs || 'Short meanings for unmatched entries come from the public-domain Strong’s lexicon.')}</p>
+    <p class="font-body-sm text-on-surface-variant">People, families, and places are from Theographic Bible Metadata (CC BY-SA 4.0), with some coordinates from OpenBible.info (CC BY). Hindi names follow the IRV Bible. Short meanings are from public-domain dictionaries (Hitchcock, Easton, Smith, Strong’s).</p>
     <p class="mt-4 mb-1"><a href="privacy.html" class="font-label-md text-primary font-semibold no-underline">Privacy Policy</a></p>
     <div class="gt-yt font-label-sm font-semibold mt-4 mb-2">Our channels</div>
     ${channelsHTML()}`);
@@ -764,7 +757,7 @@ function detail(e) {
           <span class="material-symbols-outlined text-[16px]">lightbulb</span>
           Literal Meaning
         </span>
-        ${e.m ? `<p class="font-body-lg text-body-lg text-on-surface font-medium leading-relaxed">“${esc(e.m)}”</p>${meaningNote(e)}` : '<p class="font-body-md text-on-surface-variant">No short meaning yet.</p>'}
+        ${e.m ? `<p class="font-body-lg text-body-lg text-on-surface font-medium leading-relaxed">“${esc(e.m)}”</p>` : '<p class="font-body-md text-on-surface-variant">No short meaning yet.</p>'}
         ${e.hv === false ? '<p class="font-body-sm text-on-surface-variant mt-2">Hindi spelling is unverified — we could not confidently match this name in the IRV verse text, so the English name is shown.</p>' : ''}
       </div>
     </section>
@@ -1436,7 +1429,6 @@ function godsView() {
   const list = C.gods || [];
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <h2 class="font-headline-md text-headline-md text-primary">Names of God</h2>
-    <p class="font-body-sm text-on-surface-variant">Hindi forms are taken from the IRV verse where each name or title appears.</p>
     ${list.map(e => `<article class="bg-surface-container-low rounded-xl p-4 shadow-sm flex flex-col gap-2">
       <div class="flex items-baseline justify-between gap-2 flex-wrap">
         <h3 class="font-headline-sm text-headline-sm font-bold text-primary">${esc(e.hi)}</h3>
