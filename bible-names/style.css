@@ -319,3 +319,15 @@ a.map-chip{display:inline-flex;align-items:center}
 .learn-hero-cta{display:inline-block;margin-top:12px;background:#fff;color:#7f2c15;border-radius:999px;padding:8px 14px;font-size:13px;font-weight:700}
 .next-name{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;background:#fff;border-radius:12px;padding:12px 14px;text-decoration:none;color:#7f2c15;font-weight:700;font-size:14px}
 .next-name span{color:#56423d;font-weight:600;font-size:13px;font-family:"Noto Serif Devanagari","Noto Serif",serif}
+
+.listen-pill.hidden,[hidden].listen-pill{display:none !important}
+.level-row{display:flex;gap:8px;flex-wrap:wrap}
+.level-chip{flex:1;min-width:96px;text-align:center;padding:10px 8px;border-radius:14px;background:#f3e8e8;color:#56423d;text-decoration:none;display:flex;flex-direction:column;gap:2px}
+.level-chip b{font-size:14px;font-weight:700}
+.level-chip small{font-size:11px;opacity:.8;font-weight:500}
+.level-chip.on{background:#7f2c15;color:#fff8f8}
+.badge-row{display:flex;flex-wrap:wrap;gap:8px}
+.badge-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#f3e8e8;color:#8a6f69;font-size:12px;font-weight:600}
+.badge-chip.on{background:#efe4c8;color:#6a4a12}
+.badge-ic{font-size:14px}
+.challenge-banner{background:#efe4c8;color:#5c3d10;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center}

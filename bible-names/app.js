@@ -5,9 +5,32 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
-const CACHE_V = '?v=14';
-const people = () => D.filter(e => e.t === 'p');
-const places = () => D.filter(e => e.t === 'l');
+const CACHE_V = '?v=15';
+const WEB_BASE = 'https://dscj21.github.io/bible-names/';
+let SHEET_TEXTS = {};
+let SHEET_QUIZ = [];
+function tx(key, fallback) {
+  const o = SHEET_TEXTS && SHEET_TEXTS[key];
+  const v = o && (o.en || o.hi);
+  return (v && String(v).trim()) || fallback;
+}
+function txHi(key, fallback) {
+  const o = SHEET_TEXTS && SHEET_TEXTS[key];
+  const v = o && (o.hi || o.en);
+  return (v && String(v).trim()) || fallback;
+}
+function applyChromeTexts() {
+  const tag = document.getElementById('hdrTag');
+  if (tag) tag.textContent = tx('app_subtitle', 'Biblical Names & Places');
+  const nav = { home: 'nav_home', people: 'nav_names', map: 'nav_map', learn: 'nav_learn', more: 'nav_more' };
+  document.querySelectorAll('.nav-tab').forEach(a => {
+    const lab = a.querySelector('.tab-label');
+    const key = nav[a.dataset.path];
+    if (lab && key) lab.textContent = tx(key, lab.textContent);
+  });
+}
+const people = () => D.filter(e => e.t === 'p' && !e._off);
+const places = () => D.filter(e => e.t === 'l' && !e._off && !e._mapOff);
 const uniq = arr => [...new Set((arr || []).filter(Boolean))];
 const asArr = v => !v ? [] : (Array.isArray(v) ? v.filter(Boolean) : [v]);
 function rid(id) {
@@ -115,8 +138,8 @@ const TREES = [
   { id: 'david', label: 'David' },
   { id: 'jesus', label: 'Jesus' }
 ];
-const JOURNEY_LAB = { abraham: 'Abraham', exodus: 'Exodus', jacob: 'Jacob', jesus: 'Jesus', paul1: 'Paul 1', paul2: 'Paul 2', paul3: 'Paul 3', paulrome: 'Rome', paul: 'Paul' };
-const THOUGHT = {
+let JOURNEY_LAB = { abraham: 'Abraham', exodus: 'Exodus', jacob: 'Jacob', jesus: 'Jesus', paul1: 'Paul 1', paul2: 'Paul 2', paul3: 'Paul 3', paulrome: 'Rome', paul: 'Paul' };
+let THOUGHT = {
   ref: 'मत्ती 18:20',
   hi: 'क्योंकि जहाँ दो या तीन मेरे नाम पर इकट्ठे होते हैं वहाँ मैं उनके बीच में होता हूँ।',
   tag: 'Divine Presence'
@@ -124,7 +147,8 @@ const THOUGHT = {
 
 function saveFav() { localStorage.setItem('hn-fav', JSON.stringify([...fav])); }
 
-const DAY_NAMES = ['jesus','david','abraham','moses','noah','mary','solomon','joseph','joshua','ruth','esther','daniel','samuel','elijah','peter','paul','john','isaac','jacob','aaron','sarah','hannah','deborah','miriam','benjamin'];
+const DAY_NAMES_DEFAULT = ['jesus','david','abraham','moses','noah','mary','solomon','joseph','joshua','ruth','esther','daniel','samuel','elijah','peter','paul','john','isaac','jacob','aaron','sarah','hannah','deborah','miriam','benjamin'];
+let DAY_NAMES = DAY_NAMES_DEFAULT.slice();
 function dayEntry() {
   const seed = todayKey().split('-').reduce((a, x) => a + Number(x), 1);
   const prefer = DAY_NAMES.map(id => rec(id)).filter(e => e && e.hv && e.m);
@@ -159,7 +183,7 @@ async function loadChunk(letter) {
     if (al && !M[al]) M[al] = M[d.id];
   });
   chunkLoaded[L] = true;
-  applyOverrides(loadOverrideCache());
+  applyCachedSheet();
 }
 async function loadDetail(id) {
   id = rid(id);
@@ -341,20 +365,82 @@ function placeDivIcon({ num, hi, en, side, labeled, compact, hiOnly }) {
   });
 }
 
+let canSpeakHi = null;
+function ttsPlugin() {
+  return window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
+}
+function isHiVoice(v) {
+  if (!v) return false;
+  const lang = String(v.lang || v.locale || '');
+  const name = String(v.name || '');
+  return /^hi([-_]|$)/i.test(lang) || /hindi/i.test(name);
+}
+function webHiVoices() {
+  if (typeof speechSynthesis === 'undefined' || !speechSynthesis.getVoices) return [];
+  return speechSynthesis.getVoices().filter(isHiVoice);
+}
+function revealListenButtons() {
+  document.querySelectorAll('.listen-pill').forEach(el => {
+    el.classList.toggle('hidden', canSpeakHi === false);
+    el.hidden = canSpeakHi === false;
+  });
+}
+function detectHindiVoice() {
+  const plug = ttsPlugin();
+  if (plug) {
+    const mark = ok => { canSpeakHi = !!ok; revealListenButtons(); };
+    const tryLang = () => plug.isLanguageSupported
+      ? plug.isLanguageSupported({ lang: 'hi-IN' }).then(r => mark(r && r.supported)).catch(() => mark(true))
+      : mark(true);
+    if (plug.getSupportedVoices) {
+      return plug.getSupportedVoices().then(r => {
+        const voices = (r && r.voices) || [];
+        if (voices.length) mark(voices.some(isHiVoice));
+        else tryLang();
+      }).catch(tryLang);
+    }
+    return tryLang();
+  }
+  const ready = () => {
+    const list = (typeof speechSynthesis !== 'undefined' && speechSynthesis.getVoices) ? speechSynthesis.getVoices() : [];
+    if (!list.length) return;
+    canSpeakHi = webHiVoices().length > 0;
+    revealListenButtons();
+  };
+  ready();
+  if (typeof speechSynthesis !== 'undefined' && speechSynthesis.addEventListener) {
+    speechSynthesis.addEventListener('voiceschanged', ready);
+  }
+  return Promise.resolve();
+}
 function speak(e, lang, btn) {
   const mode = lang || speakLang;
-  const text = mode === 'en' ? shortEn(e) : shortHi(e);
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = mode === 'en' ? 'en-US' : 'hi-IN';
-  const prefix = u.lang.slice(0, 2);
-  const v = speechSynthesis.getVoices().find(x => (x.lang || '').startsWith(prefix));
-  if (v) u.voice = v;
-  speechSynthesis.cancel();
+  const hi = shortHi(e);
+  const en = shortEn(e);
+  const loc = mode === 'en' ? 'en-US' : 'hi-IN';
+  let text = mode === 'en' ? en : hi;
+  if (mode !== 'en' && e && e.m) text = hi + '। ' + e.m;
+  if (!text) return;
   const waves = btn ? btn.querySelectorAll('.eq-bar') : [];
   const icon = btn ? btn.querySelector('[data-icon]') : null;
   waves.forEach(w => w.classList.add('play'));
   if (icon) icon.textContent = 'pause';
   const stop = () => { waves.forEach(w => w.classList.remove('play')); if (icon) icon.textContent = 'volume_up'; };
+  const plug = ttsPlugin();
+  if (plug && plug.speak) {
+    const go = plug.stop ? plug.stop().catch(() => {}) : Promise.resolve();
+    go.then(() => plug.speak({ text, lang: loc, rate: 0.92, pitch: 1, volume: 1, category: 'playback' }))
+      .then(stop).catch(stop);
+    return;
+  }
+  if (typeof speechSynthesis === 'undefined') { stop(); return; }
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = loc;
+  const v = (mode === 'en'
+    ? speechSynthesis.getVoices().find(x => (x.lang || '').toLowerCase().startsWith('en'))
+    : webHiVoices()[0]);
+  if (v) u.voice = v;
+  speechSynthesis.cancel();
   u.onend = stop; u.onerror = stop;
   speechSynthesis.speak(u);
 }
@@ -421,7 +507,7 @@ function channelsHTML() {
 }
 function channelsSection() {
   return `<section class="flex flex-col gap-3 yt-channels">
-    <div class="px-1"><h3 class="font-headline-sm text-headline-sm font-semibold">Our channels</h3></div>
+    <div class="px-1"><h3 class="font-headline-sm text-headline-sm font-semibold">${tx('channels_title', 'Our channels')}</h3></div>
     ${channelsHTML()}
   </section>`;
 }
@@ -435,13 +521,13 @@ function aboutSheet() {
   const cov = (pPct !== '' ? ` ${pPct}% of people and ${lPct}% of places have a verified IRV Hindi spelling.` : '');
   openSheet(`
     <button class="text-primary font-label-md mb-2" onclick="closeSheet()">Close</button>
-    <h2 class="font-headline-md text-headline-md text-primary mb-2">Holy Names</h2>
-    <p class="font-body-md text-body-md text-on-surface-variant">A lexicon of Bible names and places for Hindi-speaking Christians. Each entry shows the IRV Hindi spelling when we could verify it, the original Hebrew or Greek, a Devanagari pronunciation, and a simple Hindi meaning.</p>
+    <h2 class="font-headline-md text-headline-md text-primary mb-2">${esc(tx('about_title', 'Holy Names'))}</h2>
+    <p class="font-body-md text-body-md text-on-surface-variant">${esc(tx('about_body', 'A lexicon of Bible names and places for Hindi-speaking Christians. Each entry shows the IRV Hindi spelling when we could verify it, the original Hebrew or Greek, a Devanagari pronunciation, and a simple Hindi meaning.'))}</p>
     <p class="font-body-sm text-body-sm text-on-surface-variant mt-3">${nP} people · ${nL} places.${cov}</p>
     <h3 class="font-headline-sm text-primary mt-4 mb-1">Sources</h3>
-    <p class="font-body-sm text-on-surface-variant">People, families, and places are from Theographic Bible Metadata (CC BY-SA 4.0), with some coordinates from OpenBible.info (CC BY). Hindi names follow the IRV Bible. Short meanings are from public-domain dictionaries (Hitchcock, Easton, Smith, Strong’s).</p>
-    <p class="mt-4 mb-1"><a href="privacy.html" class="font-label-md text-primary font-semibold no-underline">Privacy Policy</a></p>
-    <div class="gt-yt font-label-sm font-semibold mt-4 mb-2">Our channels</div>
+    <p class="font-body-sm text-on-surface-variant">${esc(tx('about_sources', 'People, families, and places are from Theographic Bible Metadata (CC BY-SA 4.0), with some coordinates from OpenBible.info (CC BY). Hindi names follow the IRV Bible. Short meanings are from public-domain dictionaries (Hitchcock, Easton, Smith, Strong’s).'))}</p>
+    <p class="mt-4 mb-1"><a href="privacy.html" class="font-label-md text-primary font-semibold no-underline">${esc(tx('privacy_label', 'Privacy Policy'))}</a></p>
+    <div class="gt-yt font-label-sm font-semibold mt-4 mb-2">${esc(tx('channels_title', 'Our channels'))}</div>
     ${channelsHTML()}`);
 }
 
@@ -467,13 +553,15 @@ function waves() {
 }
 
 function listenPill(e, extra = '') {
-  return `<button type="button" class="flex items-center gap-3 bg-surface-container-highest px-3.5 py-2.5 rounded-full active:scale-95 transition-all hover:bg-surface-container-high group ${extra}" data-speak="${e.id}">
+  if (!e || canSpeakHi === false) return '';
+  const hide = canSpeakHi !== true ? ' hidden' : '';
+  return `<button type="button" class="listen-pill${hide} flex items-center gap-3 bg-surface-container-highest px-3.5 py-2.5 rounded-full active:scale-95 transition-all hover:bg-surface-container-high group ${extra}" data-speak="${e.id}" aria-label="Listen to the Hindi name">
     <div class="w-8 h-8 rounded-full bg-primary-container text-on-primary flex items-center justify-center flex-shrink-0 shadow-sm">
       <span class="material-symbols-outlined text-[18px]" data-icon>volume_up</span>
     </div>
     <div class="flex flex-col text-left">
-      <span class="font-label-sm text-label-sm text-on-surface font-semibold leading-none">Listen Pronunciation</span>
-      <span class="font-label-sm text-[10px] text-on-surface-variant mt-0.5">${esc(shortHi(e))} · ${esc(shortEn(e))}</span>
+      <span class="font-label-sm text-label-sm text-on-surface font-semibold leading-none">${esc(tx('listen_label', 'Listen'))}</span>
+      <span class="font-label-sm text-[10px] text-on-surface-variant mt-0.5">${esc(shortHi(e))}${e.m ? ' · ' + esc(clipText(e.m, 28)) : ''}</span>
     </div>
     ${waves()}
   </button>`;
@@ -588,7 +676,7 @@ function matchQuery(e, t) {
 }
 
 function filtered(base) {
-  let list = base;
+  let list = (base || []).filter(e => e && !e._off && (e.t !== 'l' || !e._mapOff));
   if (chip === 'p') list = list.filter(e => e.t === 'p');
   if (chip === 'l') list = list.filter(e => e.t === 'l');
   const t = q.trim().toLowerCase();
@@ -611,7 +699,7 @@ function continueBlock() {
   if (!e && !quizBit) return '';
   const nameBit = e ? `<a href="#p/${esc(e.id)}" class="cont-card"><span class="cont-k">Continue reading</span><span class="cont-v">${esc(e.hi)}${e.m ? ' · ' + esc(e.m) : ''}</span></a>` : '';
   return `<section class="flex flex-col gap-2 pt-1">
-    <h3 class="font-headline-sm text-headline-sm font-semibold px-1">Continue</h3>
+    <h3 class="font-headline-sm text-headline-sm font-semibold px-1">${tx('home_continue', 'Continue reading')}</h3>
     <div class="flex flex-col gap-2">${nameBit}${quizBit}</div>
   </section>`;
 }
@@ -619,13 +707,13 @@ function recentBlock() {
   const list = recentIds().slice(0, 8);
   if (!list.length) return '';
   return `<section class="flex flex-col gap-2">
-    <h3 class="font-headline-sm text-headline-sm font-semibold px-1">Recently viewed</h3>
+    <h3 class="font-headline-sm text-headline-sm font-semibold px-1">${tx('home_recent', 'Recently viewed')}</h3>
     <div class="recent-row">${list.map(e => `<a href="#p/${esc(e.id)}" class="recent-chip">${esc(e.hi)}</a>`).join('')}</div>
   </section>`;
 }
 function nextName(e) {
   const key = x => (shortEn(x) || x.en || '').toLowerCase();
-  const pool = (e.t === 'l' ? D.filter(x => x.t === 'l') : people()).filter(x => x && x.id)
+  const pool = (e.t === 'l' ? places() : people()).filter(x => x && x.id)
     .slice()
     .sort((a, b) => (a.en || '').localeCompare(b.en || '') || (a.id || '').localeCompare(b.id || ''));
   if (!pool.length) return null;
@@ -663,11 +751,11 @@ function relatedLinks(e) {
 }
 function learnView() {
   setNav('learn');
-  const S = loadQuiz();
+  const S = loadQuiz({ level: savedQuizLevel() });
   const saved = [...fav].map(id => rec(id)).filter(Boolean);
   const quizText = S.done
-    ? `You scored ${S.score} / ${S.qs.length} today.`
-    : (S.i ? `Question ${S.i + 1} of ${S.qs.length} is waiting.` : `${S.qs.length} short questions from verified names.`);
+    ? `You scored ${S.score} / ${S.qs.length} today on ${quizLevelLabel(S.level)}.`
+    : (S.i ? `Question ${S.i + 1} of ${S.qs.length} is waiting.` : `${S.qs.length} short questions · Easy, Medium or Hard.`);
   const quizCta = S.done ? "See today's score" : (S.i ? "Continue" : "Start");
   const tiles = [
     ['#lineage', 'account_tree', 'Family trees', 'Ancestors, spouses, and children'],
@@ -677,11 +765,17 @@ function learnView() {
     ['#women', 'diversity_1', 'Women of the Bible', 'Sarah, Ruth, Mary, Deborah…']
   ];
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
-    <a href="#quiz" class="learn-hero no-underline text-inherit">
-      <div class="learn-hero-k">Daily quiz · 🔥 ${S.streak || 0} day streak</div>
+    <h2 class="font-headline-md text-headline-md text-primary">${esc(tx('learn_title', 'Learn'))}</h2>
+    ${levelChips(S.level)}
+    <a href="#quiz/${S.level}" class="learn-hero no-underline text-inherit">
+      <div class="learn-hero-k">${esc(tx('quiz_title', 'Daily quiz'))} · ${esc(quizLevelLabel(S.level))} · 🔥 ${S.streak || 0} day streak</div>
       <div class="learn-hero-v">${quizText}</div>
       <span class="learn-hero-cta">${quizCta}</span>
     </a>
+    <section class="flex flex-col gap-2">
+      <h3 class="font-headline-sm font-semibold px-1">Badges</h3>
+      ${badgesRow()}
+    </section>
     ${saved.length ? `<section class="flex flex-col gap-2">
       <div class="flex items-center justify-between px-1">
         <h3 class="font-headline-sm font-semibold">Saved names</h3>
@@ -732,7 +826,7 @@ function home() {
         </div>
         <div class="flex flex-col gap-1 min-w-0">
           <span class="font-label-sm text-label-sm text-on-secondary-fixed-variant font-bold tracking-wide uppercase">Daily Spiritual Thought</span>
-          <p class="font-headline-sm text-headline-sm text-on-surface font-semibold italic leading-snug">“${esc(THOUGHT.hi)}”</p>
+          <p class="font-headline-sm text-headline-sm text-on-surface font-semibold italic leading-snug">“${esc(txHi('home_thought_hi', THOUGHT.hi))}”</p>
           <div class="flex items-center gap-2 mt-1">
             <span class="font-label-md text-label-md font-bold text-primary">— ${esc(THOUGHT.ref)}</span>
             <span class="text-on-surface-variant font-label-sm text-label-sm">• ${esc(THOUGHT.tag)}</span>
@@ -752,7 +846,7 @@ function home() {
       <div class="flex items-center justify-between px-1">
         <div class="flex items-center gap-2">
           <span class="flex h-2.5 w-2.5 rounded-full bg-tertiary-container animate-pulse"></span>
-          <span class="font-label-sm text-label-sm uppercase tracking-wider text-tertiary font-semibold">Daily Featured Study</span>
+          <span class="font-label-sm text-label-sm uppercase tracking-wider text-tertiary font-semibold">${esc(tx('home_daily_label', 'Daily Featured Study'))}</span>
         </div>
         <span class="font-label-sm text-label-sm text-on-surface-variant">Name of the Day</span>
       </div>
@@ -1187,7 +1281,7 @@ function lineageView(rootId) {
 }
 
 const CANAAN_BOUNDS = [[29.45, 34.18], [33.72, 36.55]];
-const FAMOUS_KEYS = [
+let FAMOUS_KEYS = [
   'jerusalem', 'bethlehem', 'nazareth', 'capernaum', 'hebron', 'bethel',
   'jericho', 'shechem', 'beersheba', 'gaza', 'joppa', 'caesarea', 'tyre',
   'sidon', 'damascus', 'galilee', 'samaria', 'zion', 'jordan', 'moab',
@@ -1195,7 +1289,7 @@ const FAMOUS_KEYS = [
   'egypt', 'mount_sinai_855', 'sea_of_galilee_1032', 'mount_of_olives_861',
   'bethany', 'ai'
 ];
-const MAP_CATS = [
+let MAP_CATS = [
   ['all', 'All'],
   ['famous', 'Famous places'],
   ['city', 'Cities'],
@@ -1233,7 +1327,11 @@ function geoPlaces() {
       ref: e.ref,
       v: e.v
     };
-  }).filter(p => p.ll && p.ll.length === 2);
+  }).filter(p => {
+    const e = rec(p.id);
+    if (e && (e._off || e._mapOff)) return false;
+    return p.ll && p.ll.length === 2;
+  });
 }
 function topByMentions(list, n) {
   return list.slice().sort((a, b) => (b.vc || 0) - (a.vc || 0) || (a.en || '').localeCompare(b.en || '')).slice(0, n);
@@ -1470,13 +1568,14 @@ function bindJourneyStepper(m, j, stopMarks) {
 }
 
 function homeMapCard() {
-  const nPlaces = (STATS.placesWithCoords || STATS.places || 1271).toLocaleString('en-IN');
+  const nPlaces = (geoPlaces().length || STATS.placesWithCoords || STATS.places || 1271).toLocaleString('en-IN');
   const nJ = (C.journeys || []).length || 8;
+  const sub = tx('home_map_sub', '') || (nPlaces + ' places · ' + nJ + ' journeys');
   return `<a href="#map" class="home-map-card" aria-label="Open the Bible map">
     <img src="images/home-map.png${CACHE_V}" width="702" height="360" alt="Map of Bible places in Israel and Canaan"/>
     <div class="home-map-cap">
-      <div class="home-map-ttl">Bible Map</div>
-      <div class="home-map-sub">${nPlaces} places · ${nJ} journeys</div>
+      <div class="home-map-ttl">${esc(tx('home_map_title', 'Bible Map'))}</div>
+      <div class="home-map-sub">${esc(sub)}</div>
     </div>
   </a>`;
 }
@@ -1500,7 +1599,7 @@ function mapView(journeyId) {
       ${j ? (journeyNote ? `<p class="map-note">${esc(journeyNote)}</p>` : '') : `
         <div class="map-chips" id="mapCats">${catChips}</div>
         <div class="map-search">
-          <input id="mapq" type="search" placeholder="Search a place…" autocomplete="off" enterkeyhint="search"/>
+          <input id="mapq" type="search" placeholder="${esc(tx('map_search_placeholder', 'Search a place, e.g. Bethlehem'))}" autocomplete="off" enterkeyhint="search"/>
           <div id="mapSuggest" class="map-suggest hidden"></div>
         </div>
         <div class="map-chips" id="mapFamous">${fam.map(p => `<button type="button" class="map-chip" data-fly="${esc(p.id)}">${esc(p.hi || p.en)}</button>`).join('')}</div>
@@ -1660,18 +1759,18 @@ function bindClicks() {
 
 function exploreTiles() {
   const tiles = [
-    ['#finder', 'search', "Your name's Bible meaning", 'Find a Bible name and its Hindi meaning'],
-    ['#quiz', 'quiz', 'Daily quiz', '5 questions a day, with a streak'],
-    ['#timeline', 'timeline', 'Timeline', 'Adam to Jesus (approximate dates)'],
-    ['#genealogy', 'account_tree', "Jesus' genealogy", 'Matthew 1 and Luke 3'],
-    ['#gods', 'wb_sunny', 'Names of God', 'El Shaddai, Yahweh Yireh, Immanuel…'],
-    ['#women', 'diversity_1', 'Women of the Bible', 'Sarah, Ruth, Mary, Deborah…'],
-    ['#map/abraham', 'explore', 'Journey maps', "Abraham, the Exodus, Paul's travels"],
-    ['#lineage', 'favorite', 'Family trees', 'Couples and children, grouped by mother']
+    ['#finder', 'search', tx('explore_finder_title', "Your name's Bible meaning"), tx('explore_finder_sub', 'Find a Bible name and its Hindi meaning')],
+    ['#quiz', 'quiz', tx('explore_quiz_title', 'Daily quiz'), tx('explore_quiz_sub', '5 questions a day, with a streak')],
+    ['#timeline', 'timeline', tx('explore_timeline_title', 'Timeline'), tx('explore_timeline_sub', 'Adam to Jesus (approximate dates)')],
+    ['#genealogy', 'account_tree', tx('explore_genealogy_title', "Jesus' genealogy"), tx('explore_genealogy_sub', 'Matthew 1 and Luke 3')],
+    ['#gods', 'wb_sunny', tx('explore_gods_title', 'Names of God'), tx('explore_gods_sub', 'El Shaddai, Yahweh Yireh, Immanuel…')],
+    ['#women', 'diversity_1', tx('explore_women_title', 'Women of the Bible'), tx('explore_women_sub', 'Sarah, Ruth, Mary, Deborah…')],
+    ['#map/abraham', 'explore', tx('explore_journeys_title', 'Journey maps'), tx('explore_journeys_sub', "Abraham, the Exodus, Paul's travels")],
+    ['#lineage', 'favorite', tx('explore_trees_title', 'Family trees'), tx('explore_trees_sub', 'Couples and children, grouped by mother')]
   ];
   return `<section class="flex flex-col gap-3">
     <div class="flex items-center justify-between px-1">
-      <h3 class="font-headline-sm text-headline-sm font-semibold">Explore</h3>
+      <h3 class="font-headline-sm text-headline-sm font-semibold">${tx('explore_title', 'Explore')}</h3>
       <a href="#more" class="font-label-sm text-label-sm text-primary font-semibold">All</a>
     </div>
     <div class="feature-grid">${tiles.map(([href,ic,ttl,sub]) => `<a class="feature-tile" href="${href}"><span class="material-symbols-outlined text-primary">${ic}</span><span class="ttl">${ttl}</span><span class="sub">${sub}</span></a>`).join('')}</div>
@@ -1681,10 +1780,10 @@ function exploreTiles() {
 function moreView() {
   setNav('more');
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
-    <h2 class="font-headline-md text-headline-md text-primary px-1">Explore</h2>
+    <h2 class="font-headline-md text-headline-md text-primary px-1">${tx('explore_title', 'Explore')}</h2>
     ${exploreTiles()}
     ${channelsSection()}
-    <a href="privacy.html" class="mt-2 px-1 font-label-md text-primary font-semibold no-underline">Privacy Policy</a>
+    <a href="privacy.html" class="mt-2 px-1 font-label-md text-primary font-semibold no-underline">${esc(tx('privacy_label', 'Privacy Policy'))}</a>
   </div>`;
 }
 
@@ -1761,19 +1860,107 @@ function shuffle(a, seed) {
 function fatherOf(e) {
   return asArr(e && e.father).map(rec).find(x => x && x.hv && x.hi);
 }
-function makeQuestions() {
+const QUIZ_LEVELS = [
+  ['easy', 'Easy', 'Well-known names'],
+  ['medium', 'Medium', 'Familiar names'],
+  ['hard', 'Hard', 'Lesser-known names']
+];
+function quizLevelLabel(id) {
+  const row = QUIZ_LEVELS.find(x => x[0] === id);
+  return row ? row[1] : 'Easy';
+}
+function savedQuizLevel() {
+  try { return localStorage.getItem('hn-quiz-level') || 'easy'; } catch (e) { return 'easy'; }
+}
+function setQuizLevel(id) {
+  if (!['easy', 'medium', 'hard'].includes(id)) id = 'easy';
+  try { localStorage.setItem('hn-quiz-level', id); } catch (e) {}
+  return id;
+}
+function quizSeed(level, raw) {
+  if (raw != null && String(raw).trim() !== '') {
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : 1;
+  }
+  const base = todayKey().split('-').reduce((a, x) => a + Number(x), 1);
+  return base * 13 + ({ easy: 1, medium: 2, hard: 3 }[level] || 1);
+}
+function loadBadges() {
+  try { return JSON.parse(localStorage.getItem('hn-badges') || '{}'); } catch (e) { return {}; }
+}
+function saveBadges(b) {
+  try { localStorage.setItem('hn-badges', JSON.stringify(b || {})); } catch (e) {}
+}
+function grantBadge(id) {
+  const b = loadBadges();
+  b.earned = b.earned || {};
+  if (b.earned[id]) return false;
+  b.earned[id] = todayKey();
+  saveBadges(b);
+  return true;
+}
+function addCorrect(n) {
+  const b = loadBadges();
+  b.totalCorrect = (b.totalCorrect || 0) + (n || 0);
+  saveBadges(b);
+  if (b.totalCorrect >= 50) grantBadge('correct_50');
+  return b.totalCorrect;
+}
+const BADGE_DEFS = [
+  { id: 'first_quiz', name: 'First quiz', how: 'Finish your first quiz' },
+  { id: 'streak_7', name: '7-day streak', how: 'Play 7 days in a row' },
+  { id: 'correct_50', name: '50 correct', how: 'Get 50 answers right' },
+  { id: 'hard_ace', name: 'Hard ace', how: 'Score 5/5 on Hard' },
+  { id: 'challenger', name: 'Challenger', how: "Beat a friend's score" }
+];
+function onQuizComplete(S) {
+  const fresh = [];
+  if (grantBadge('first_quiz')) fresh.push('first_quiz');
+  addCorrect(S.score || 0);
+  if ((S.streak || 0) >= 7 && grantBadge('streak_7')) fresh.push('streak_7');
+  if (S.level === 'hard' && S.score === S.qs.length && grantBadge('hard_ace')) fresh.push('hard_ace');
+  if (S.challenge && S.score > Number(S.challenge.beat || 0) && grantBadge('challenger')) fresh.push('challenger');
+  S.freshBadges = fresh;
+  return fresh;
+}
+function badgesRow() {
+  const earned = (loadBadges().earned || {});
+  return `<div class="badge-row">${BADGE_DEFS.map(b => {
+    const on = !!earned[b.id];
+    return `<div class="badge-chip${on ? ' on' : ''}" title="${esc(b.how)}"><span class="badge-ic">${on ? '🏅' : '○'}</span><span class="badge-n">${esc(b.name)}</span></div>`;
+  }).join('')}</div>`;
+}
+function levelChips(cur, hrefBase) {
+  return `<div class="level-row">${QUIZ_LEVELS.map(([id, lab, sub]) => {
+    const href = hrefBase ? hrefBase + id : '#quiz/' + id;
+    return `<a href="${href}" class="level-chip${cur === id ? ' on' : ''}"><b>${esc(lab)}</b><small>${esc(sub)}</small></a>`;
+  }).join('')}</div>`;
+}
+function poolForLevel(level) {
   const verified = people().filter(e => e.g !== 'd' && e.hv && e.m && e.hi);
-  const known = verified.filter(e => (e.vc || 0) >= 8);
-  const all = known.length >= 24 ? known : verified;
+  const famous = new Set((DAY_NAMES || []).map(id => { const e = rec(id); return e && e.id; }).filter(Boolean));
+  const easy = verified.filter(e => famous.has(e.id) || (e.vc || 0) >= 40);
+  const mid = verified.filter(e => (e.vc || 0) >= 8 && (e.vc || 0) < 40);
+  const hard = verified.filter(e => (e.vc || 0) < 8);
+  if (level === 'hard') return hard.length >= 12 ? hard : verified.filter(e => (e.vc || 0) < 20);
+  if (level === 'medium') return mid.length >= 12 ? mid : verified.filter(e => (e.vc || 0) >= 5);
+  return easy.length >= 12 ? easy : verified.filter(e => (e.vc || 0) >= 8);
+}
+
+function makeQuestions(seed, level) {
+  level = level || 'easy';
+  seed = Number(seed) || 1;
+  const all = poolForLevel(level);
+  const fallback = people().filter(e => e.g !== 'd' && e.hv && e.m && e.hi);
+  const src = all.length >= 8 ? all : fallback;
   const famAll = people().filter(e => e.g !== 'd' && e.hv && e.hi && fatherOf(e));
-  const fam = famAll.filter(e => (e.vc || 0) >= 5);
+  const fam = famAll.filter(e => (e.vc || 0) >= (level === 'hard' ? 0 : 5));
   const famSrc = fam.length >= 6 ? fam : famAll;
-  const seed = todayKey().split('-').reduce((a, x) => a + Number(x), 1);
-  const names = shuffle(all, seed);
+  const names = shuffle(src, seed);
   const dads = shuffle(famSrc, seed + 19);
   const used = new Set();
   const qs = [];
-  const optionNames = (e, n) => shuffle(all.filter(x => x.id !== e.id), seed + qs.length * 7 + 3).slice(0, n);
+  const optionNames = (e, n) => shuffle(src.filter(x => x.id !== e.id), seed + qs.length * 7 + 3).slice(0, n);
   const pushNameQ = type => {
     const e = names.find(x => !used.has(x.id));
     if (!e) return false;
@@ -1795,81 +1982,180 @@ function makeQuestions() {
     });
     let others = shuffle(uniq, seed + qs.length * 5).slice(0, 3);
     if (others.length < 3) {
-      const extra = all.filter(x => x.id !== dad.id && !others.some(o => o.id === x.id) && x.id !== e.id);
+      const extra = src.filter(x => x.id !== dad.id && !others.some(o => o.id === x.id) && x.id !== e.id);
       others = others.concat(shuffle(extra, seed + 11).slice(0, 3 - others.length));
     }
     if (others.length < 3) return pushNameQ('name');
     qs.push({ id: e.id, type: 'father', fatherId: dad.id, opts: shuffle([dad, ...others], seed + qs.length * 9).map(x => x.id) });
     return true;
   };
-  pushNameQ('meaning');
-  pushNameQ('name');
-  pushFatherQ();
-  pushNameQ('meaning');
-  pushNameQ('name');
+  const curated = shuffle((SHEET_QUIZ || []).filter(q => q && q.question && q.opts && q.opts.length >= 4 && q.correct), seed + 3);
+  curated.slice(0, 2).forEach(q => {
+    if (qs.length >= 2) return;
+    qs.push({ type: 'custom', id: q.id, question: q.question, opts: q.opts.slice(0, 4), correct: q.correct, explanation: q.explanation || '' });
+  });
+  if (!qs.some(q => q.type === 'meaning')) pushNameQ('meaning');
+  if (!qs.some(q => q.type === 'name')) pushNameQ('name');
+  if (!qs.some(q => q.type === 'father')) pushFatherQ();
   while (qs.length < 5) { if (!pushNameQ(qs.length % 2 ? 'name' : 'meaning')) break; }
   return qs.slice(0, 5);
 }
 
-function loadQuiz() {
-  const raw = JSON.parse(localStorage.getItem('hn-quiz') || '{}');
-  if (raw.date === todayKey() && raw.qs) return raw;
-  const keep = (raw.date && isYesterday(raw.date) && raw.done) ? (raw.streak || 0) : 0;
-  const state = { date: todayKey(), qs: makeQuestions(), i: 0, score: 0, done: false, streak: keep, picked: null };
-  localStorage.setItem('hn-quiz', JSON.stringify(state));
+function quizStoreKey(S) {
+  if (S && S.challenge) return 'hn-quiz-ch';
+  return 'hn-quiz';
+}
+function loadQuiz(opts) {
+  opts = opts || {};
+  const level = setQuizLevel(opts.level || savedQuizLevel());
+  const challenge = opts.challenge || null;
+  const seed = quizSeed(level, challenge ? challenge.seed : opts.seed);
+  const key = challenge ? 'hn-quiz-ch' : 'hn-quiz';
+  let raw = {};
+  try { raw = JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { raw = {}; }
+  const same = challenge
+    ? (raw.challenge && String(raw.challenge.seed) === String(challenge.seed) && raw.level === level && raw.qs)
+    : (raw.date === todayKey() && raw.level === level && raw.qs && !raw.challenge);
+  if (same) return raw;
+  const keep = (!challenge && raw.date && isYesterday(raw.date) && raw.done) ? (raw.streak || 0) : (challenge ? 0 : ((raw.date === todayKey() && raw.streak) || 0));
+  const state = {
+    date: todayKey(),
+    level,
+    seed,
+    qs: makeQuestions(seed, level),
+    i: 0,
+    score: 0,
+    done: false,
+    streak: keep,
+    picked: null,
+    challenge: challenge || null
+  };
+  localStorage.setItem(key, JSON.stringify(state));
   return state;
 }
-function saveQuiz(s) { localStorage.setItem('hn-quiz', JSON.stringify(s)); }
+function saveQuiz(s) { localStorage.setItem(quizStoreKey(s), JSON.stringify(s)); }
+function quizHash(S) {
+  if (S && S.challenge) return 'quiz/ch/' + S.level + '/' + S.challenge.seed + '/' + S.challenge.beat;
+  return 'quiz/' + (S && S.level ? S.level : savedQuizLevel());
+}
+function challengeUrl(S) {
+  return WEB_BASE + '#quiz/ch/' + (S.level || 'easy') + '/' + S.seed + '/' + S.score;
+}
+function challengeShareText(S) {
+  return 'I scored ' + S.score + '/' + S.qs.length + ' on the Holy Names ' + quizLevelLabel(S.level) + ' quiz. Can you beat me?\n' + challengeUrl(S);
+}
+function doChallengeShare(S) {
+  const text = challengeShareText(S);
+  const url = 'https://wa.me/?text=' + encodeURIComponent(text);
+  if (navigator.share) navigator.share({ text, url: challengeUrl(S), title: 'Holy Names quiz' }).catch(() => { if (window.Capacitor && window.openExt) openExt(url); else window.open(url, '_blank'); });
+  else if (window.Capacitor && window.openExt) openExt(url);
+  else window.open(url, '_blank');
+}
 
-function quizView() {
+function quizView(hash) {
   setNav('quiz');
-  const S = loadQuiz();
+  const parts = String(hash || location.hash || 'quiz').replace(/^#/, '').split('/');
+  // quiz | quiz/easy | quiz/ch/easy/seed/score
+  let opts = { level: savedQuizLevel() };
+  if (parts[1] === 'ch' && parts[2]) {
+    opts = { level: parts[2], challenge: { seed: parts[3], beat: Number(parts[4] || 0) } };
+  } else if (parts[1] && ['easy', 'medium', 'hard'].includes(parts[1])) {
+    opts = { level: parts[1] };
+  }
+  const S = loadQuiz(opts);
+  const title = tx('quiz_title', 'Daily quiz');
   if (S.done || S.i >= S.qs.length) {
-    if (!S.done) { S.done = true; S.streak = (S.streak || 0) + 1; saveQuiz(S); }
+    if (!S.done) {
+      S.done = true;
+      if (!S.challenge) S.streak = (S.streak || 0) + 1;
+      onQuizComplete(S);
+      saveQuiz(S);
+    }
+    const beat = S.challenge ? Number(S.challenge.beat || 0) : null;
+    const result = beat == null ? '' : (S.score > beat
+      ? `<p class="font-body-md text-primary mt-3 font-semibold">You beat the score (${S.score}–${beat})!</p>`
+      : S.score === beat
+        ? `<p class="font-body-md mt-3">It's a tie at ${S.score}. Challenge them again?</p>`
+        : `<p class="font-body-md mt-3">They still lead ${beat}–${S.score}. Try again tomorrow, or pick another level.</p>`);
+    const fresh = (S.freshBadges || []).map(id => {
+      const d = BADGE_DEFS.find(b => b.id === id);
+      return d ? `<span class="badge-chip on">🏅 ${esc(d.name)}</span>` : '';
+    }).join('');
     app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
-      <h2 class="font-headline-md text-headline-md text-primary">Daily quiz</h2>
+      <h2 class="font-headline-md text-headline-md text-primary">${esc(title)}</h2>
+      ${levelChips(S.level)}
       <div class="bg-surface-container-low rounded-xl p-5 text-center">
+        <p class="font-label-sm uppercase tracking-wider text-tertiary font-semibold">${esc(quizLevelLabel(S.level))}${S.challenge ? ' · Challenge' : ''}</p>
         <p class="font-headline-lg-mobile text-primary font-bold">${S.score} / ${S.qs.length}</p>
         <p class="font-body-md mt-2">Today's score</p>
-        <p class="font-label-lg text-tertiary mt-3">🔥 Streak: ${S.streak} day${S.streak===1?'':'s'}</p>
-        <p class="font-body-sm text-on-surface-variant mt-3">Come back tomorrow for a new set of five questions.</p>
+        ${S.challenge ? result : `<p class="font-label-lg text-tertiary mt-3">🔥 Streak: ${S.streak} day${S.streak===1?'':'s'}</p>`}
+        <p class="font-body-sm text-on-surface-variant mt-3">${esc(tx('quiz_come_back', 'Come back tomorrow for a new set of five questions.'))}</p>
+        ${fresh ? `<div class="badge-row mt-3">${fresh}</div>` : ''}
+        <div class="flex flex-col sm:flex-row gap-2 mt-4">
+          <button type="button" id="btnChShare" class="flex-1 rounded-xl bg-primary text-on-primary py-3 font-label-lg font-semibold">Challenge a friend</button>
+          <button type="button" id="btnChWa" class="flex-1 rounded-xl bg-secondary text-on-secondary py-3 font-label-lg font-semibold">WhatsApp</button>
+        </div>
       </div>
+      <h3 class="font-headline-sm font-semibold mt-2">Badges</h3>
+      ${badgesRow()}
     </div>`;
+    const wa = 'https://wa.me/?text=' + encodeURIComponent(challengeShareText(S));
+    const shareBtn = document.getElementById('btnChShare');
+    const waBtn = document.getElementById('btnChWa');
+    if (shareBtn) shareBtn.onclick = () => doChallengeShare(S);
+    if (waBtn) waBtn.onclick = () => { if (window.Capacitor && window.openExt) openExt(wa); else window.open(wa, '_blank'); };
     return;
   }
   const q = S.qs[S.i];
-  const ans = M[q.id];
-  const prompt = q.type === 'name'
-    ? `Whose name means “${esc(ans.m)}”?`
-    : q.type === 'father'
-      ? `Who is the father of ${esc(ans.hi)} (${esc(shortEn(ans))})?`
-      : `What is the meaning of ${esc(ans.hi)} (${esc(shortEn(ans))})?`;
-  const label = o => (q.type === 'meaning') ? `“${o.m}”` : `${o.hi} (${shortEn(o)})`;
-  const correctId = q.type === 'father' ? q.fatherId : q.id;
+  const banner = S.challenge
+    ? `<div class="challenge-banner">Beat this score: <b>${esc(String(S.challenge.beat))}/${S.qs.length}</b> · ${esc(quizLevelLabel(S.level))}</div>`
+    : '';
+  let prompt, options, correctVal;
+  if (q.type === 'custom') {
+    prompt = esc(q.question);
+    options = (q.opts || []).map(o => [o, o]);
+    correctVal = q.correct;
+  } else {
+    const ans = M[q.id];
+    prompt = q.type === 'name'
+      ? `Whose name means “${esc(ans.m)}”?`
+      : q.type === 'father'
+        ? `Who is the father of ${esc(ans.hi)} (${esc(shortEn(ans))})?`
+        : `What is the meaning of ${esc(ans.hi)} (${esc(shortEn(ans))})?`;
+    const label = o => (q.type === 'meaning') ? `“${o.m}”` : `${o.hi} (${shortEn(o)})`;
+    options = (q.opts || []).map(id => [id, label(M[id])]);
+    correctVal = q.type === 'father' ? q.fatherId : q.id;
+  }
   app.innerHTML = `<div class="flex flex-col w-full px-gutter pb-8 gap-space-sm pt-2">
     <div class="flex items-center justify-between">
-      <h2 class="font-headline-md text-headline-md text-primary">Daily quiz</h2>
-      <span class="font-label-sm text-on-surface-variant">${S.i + 1} / ${S.qs.length} · 🔥 ${S.streak}</span>
+      <h2 class="font-headline-md text-headline-md text-primary">${esc(title)}</h2>
+      <span class="font-label-sm text-on-surface-variant">${S.i + 1} / ${S.qs.length} · ${esc(quizLevelLabel(S.level))}${S.challenge ? '' : ' · 🔥 ' + S.streak}</span>
     </div>
+    ${banner}
+    ${levelChips(S.level)}
     <div class="bg-surface-container-low rounded-xl p-4 shadow-sm">
       <p class="font-headline-sm text-headline-sm mb-2">${prompt}</p>
-      ${q.opts.map(id => `<button type="button" class="quiz-opt" data-opt="${id}">${esc(label(M[id]))}</button>`).join('')}
+      ${options.map(([val, lab]) => `<button type="button" class="quiz-opt" data-opt="${esc(val)}">${esc(lab)}</button>`).join('')}
     </div>
   </div>`;
   app.querySelectorAll('[data-opt]').forEach(b => b.onclick = () => {
     if (S.picked) return;
     S.picked = b.dataset.opt;
-    const ok = S.picked === correctId;
+    const ok = S.picked === String(correctVal);
     if (ok) S.score++;
     app.querySelectorAll('[data-opt]').forEach(x => {
-      if (x.dataset.opt === correctId) x.classList.add('ok');
+      if (x.dataset.opt === String(correctVal)) x.classList.add('ok');
       else if (x.dataset.opt === S.picked) x.classList.add('bad');
     });
     S.i++;
     S.picked = null;
-    if (S.i >= S.qs.length) { S.done = true; S.streak = (S.streak || 0) + 1; }
+    if (S.i >= S.qs.length) {
+      S.done = true;
+      if (!S.challenge) S.streak = (S.streak || 0) + 1;
+      onQuizComplete(S);
+    }
     saveQuiz(S);
-    setTimeout(quizView, 700);
+    setTimeout(() => quizView(quizHash(S)), 700);
   });
 }
 
@@ -2081,7 +2367,7 @@ function route() {
   if (h === 'learn') return learnView();
   if (h === 'more') return moreView();
   if (h === 'finder') return finderView();
-  if (h === 'quiz') return quizView();
+  if (h === 'quiz' || h.startsWith('quiz/')) return quizView(h);
   if (h === 'timeline') return timelineView();
   if (h === 'genealogy' || h.startsWith('genealogy/')) return genealogyView(h.split('/')[1]);
   if (h === 'gods') return godsView();
@@ -2126,75 +2412,17 @@ addEventListener('hashchange', route);
 
 
 const SHEET_ID = '1b3RrsHrYPWBF3LFtHlGNW-OII4Wto2t0RmfbzHKAq0w';
-const SHEET_CSV = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=Meanings';
-const SHEET_CSV_ALT = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/export?format=csv&gid=1681189892';
+const SHEET_TABS = ['Names', 'Places', 'Journeys', 'Quiz', 'Featured', 'Texts'];
 const LS_OVERRIDES = 'hn-overrides-v1';
+const LS_SHEET = 'hn-sheet-v2';
+const parseCsv = (window.HNSheet && HNSheet.parseCsv) || function () { return []; };
+const looksLikeCsv = (window.HNSheet && HNSheet.looksLikeCsv) || function () { return false; };
 
-function parseCsv(text) {
-  const rows = [];
-  let row = [], cell = '', i = 0, q = false;
-  const s = String(text || '').replace(/^\uFEFF/, '');
-  while (i < s.length) {
-    const c = s[i];
-    if (q) {
-      if (c === '"') {
-        if (s[i + 1] === '"') { cell += '"'; i += 2; continue; }
-        q = false; i++; continue;
-      }
-      cell += c; i++; continue;
-    }
-    if (c === '"') { q = true; i++; continue; }
-    if (c === ',') { row.push(cell); cell = ''; i++; continue; }
-    if (c === '\r') { i++; continue; }
-    if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; i++; continue; }
-    cell += c; i++;
-  }
-  if (cell.length || row.length) { row.push(cell); rows.push(row); }
-  return rows.filter(r => r.some(x => String(x || '').trim()));
-}
-function colIndex(head, names) {
-  return head.findIndex(h => names.indexOf(h) !== -1);
-}
-function overridesFromRows(rows) {
-  if (!rows || !rows.length) return {};
-  const head = rows[0].map(h => String(h || '').trim().toLowerCase().replace(/\s+/g, '_'));
-  const iId = colIndex(head, ['id']);
-  const iHi = colIndex(head, ['hindi_name', 'hindiname', 'hi', 'hindi']);
-  const iM = colIndex(head, ['hindi_meaning', 'meaning', 'hindimeaning', 'm']);
-  if (iId < 0) return {};
-  const out = {};
-  for (let r = 1; r < rows.length; r++) {
-    const line = rows[r];
-    const id = String((line && line[iId]) || '').trim();
-    if (!id) continue;
-    const hi = iHi >= 0 ? String(line[iHi] ?? '').trim() : '';
-    const m = iM >= 0 ? String(line[iM] ?? '').trim() : '';
-    if (!hi && !m) continue;
-    out[id] = {};
-    if (hi) out[id].hi = hi;
-    if (m) out[id].m = m;
-  }
-  return out;
-}
-function overridesFromGviz(data) {
-  const table = data && data.table;
-  if (!table) return {};
-  const head = (table.cols || []).map(c => c.label || c.id || '');
-  const body = (table.rows || []).map(r => (r.c || []).map(c => {
-    if (!c) return '';
-    if (c.v == null) return '';
-    return String(c.f != null ? c.f : c.v);
-  }));
-  return overridesFromRows([head].concat(body));
-}
 function loadOverrideCache() {
   try {
     const raw = JSON.parse(localStorage.getItem(LS_OVERRIDES) || '{}');
     return raw && raw.map && typeof raw.map === 'object' ? raw.map : {};
   } catch (err) { return {}; }
-}
-function saveOverrideCache(map) {
-  try { localStorage.setItem(LS_OVERRIDES, JSON.stringify({ at: Date.now(), map: map || {} })); } catch (err) {}
 }
 function touchOverride(e, o) {
   if (!e || !o) return;
@@ -2211,10 +2439,38 @@ function applyOverrides(map) {
     if (o) touchOverride(e, o);
   });
 }
-function looksLikeCsv(text) {
-  if (!text || /^\s*</.test(text) || /accounts\.google\.com/.test(text)) return false;
-  const first = String(text).split(/\r?\n/).find(l => l.trim());
-  return !!first && /id|hindi_name|hindi_meaning|english_name/i.test(first);
+function loadSheetCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_SHEET) || 'null');
+    return raw && raw.pack ? raw.pack : null;
+  } catch (err) { return null; }
+}
+function saveSheetCache(pack) {
+  try { localStorage.setItem(LS_SHEET, JSON.stringify({ at: Date.now(), pack: pack || {} })); } catch (err) {}
+}
+function applySheetPack(pack) {
+  if (!pack || !window.HNSheet || !HNSheet.applyPack) return;
+  const result = HNSheet.applyPack(pack, { D, M, GEO, C, rec, normalize });
+  SHEET_TEXTS = result.texts || SHEET_TEXTS || {};
+  SHEET_QUIZ = result.quiz || [];
+  if (result.dayIds && result.dayIds.length) DAY_NAMES = result.dayIds;
+  if (result.famousIds && result.famousIds.length) FAMOUS_KEYS = result.famousIds;
+  if (result.journeyLab) {
+    Object.keys(result.journeyLab).forEach(k => { if (result.journeyLab[k]) JOURNEY_LAB[k] = result.journeyLab[k]; });
+  }
+  if (result.thought) {
+    if (result.thought.hi) THOUGHT.hi = result.thought.hi;
+    if (result.thought.ref) THOUGHT.ref = result.thought.ref;
+    if (result.thought.tag) THOUGHT.tag = result.thought.tag;
+  }
+  MAP_CATS = MAP_CATS.map(([id, lab]) => [id, tx('map_cat_' + id, lab)]);
+  applyChromeTexts();
+  return result;
+}
+function applyCachedSheet() {
+  const pack = loadSheetCache();
+  if (pack) applySheetPack(pack);
+  else applyOverrides(loadOverrideCache());
 }
 function fetchWithTimeout(url, ms) {
   const ctrl = new AbortController();
@@ -2224,7 +2480,7 @@ function fetchWithTimeout(url, ms) {
     return r.text();
   }).finally(() => clearTimeout(t));
 }
-function fetchSheetJsonp(ms) {
+function fetchSheetJsonp(tab, ms) {
   return new Promise((resolve, reject) => {
     const cb = 'hnSheet_' + Math.random().toString(36).slice(2);
     const script = document.createElement('script');
@@ -2240,27 +2496,48 @@ function fetchSheetJsonp(ms) {
     }
     window[cb] = data => finish(null, data);
     script.onerror = () => finish(new Error('script'));
-    script.src = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?sheet=Meanings&tqx=' + encodeURIComponent('out:json;responseHandler:' + cb) + '&_=' + Date.now();
+    const name = tab === 'Names' ? 'Names' : tab;
+    script.src = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?sheet=' + encodeURIComponent(name) + '&tqx=' + encodeURIComponent('out:json;responseHandler:' + cb) + '&_=' + Date.now();
     document.head.appendChild(script);
   });
 }
-function fetchSheetOverrides(ms) {
+function fetchTabRows(tab, ms) {
   ms = ms || 5000;
   const bust = '&_=' + Date.now();
-  return fetchWithTimeout(SHEET_CSV + bust, ms).then(t => {
+  const url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(tab);
+  const parse = t => {
     if (!looksLikeCsv(t)) throw new Error('not csv');
-    return overridesFromRows(parseCsv(t));
-  }).catch(() => fetchWithTimeout(SHEET_CSV_ALT + (SHEET_CSV_ALT.indexOf('?') >= 0 ? bust : '?' + bust.slice(1)), ms).then(t => {
-    if (!looksLikeCsv(t)) throw new Error('not csv');
-    return overridesFromRows(parseCsv(t));
-  })).catch(() => fetchSheetJsonp(ms).then(overridesFromGviz));
+    return parseCsv(t);
+  };
+  return fetchWithTimeout(url + bust, ms).then(parse).catch(() => fetchSheetJsonp(tab, ms).then(data => {
+    const rows = HNSheet.gvizToRows(data);
+    if (!rows.length) throw new Error('empty');
+    return rows;
+  }));
+}
+function fetchSheetPack(ms) {
+  const tabs = SHEET_TABS.slice();
+  return Promise.all(tabs.map(tab => fetchTabRows(tab, ms || 5000).then(rows => [tab, rows]).catch(() => [tab, null]))).then(pairs => {
+    const tabRows = {};
+    pairs.forEach(([tab, rows]) => { if (rows && rows.length) tabRows[tab] = rows; });
+    if (!tabRows.Names) {
+      return fetchTabRows('Meanings', ms || 5000).then(rows => {
+        tabRows.Names = rows;
+        return HNSheet.packFromTabRows(tabRows);
+      }).catch(() => {
+        if (!Object.keys(tabRows).length) throw new Error('no tabs');
+        return HNSheet.packFromTabRows(tabRows);
+      });
+    }
+    return HNSheet.packFromTabRows(tabRows);
+  });
 }
 function refreshOverrides() {
-  return fetchSheetOverrides(5000).then(map => {
-    const prev = JSON.stringify(loadOverrideCache());
-    saveOverrideCache(map);
-    applyOverrides(map);
-    if (JSON.stringify(map) === prev) return;
+  return fetchSheetPack(5000).then(pack => {
+    const prev = localStorage.getItem(LS_SHEET) || '';
+    saveSheetCache(pack);
+    applySheetPack(pack);
+    if (JSON.stringify({ at: 0, pack }) && localStorage.getItem(LS_SHEET) === prev) return;
     const ae = document.activeElement;
     const typing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
     if (typing) return;
@@ -2304,7 +2581,9 @@ Promise.all([
   STATS = stats || {};
   PLACE_PEOPLE = placePeople || {};
   ingestIndex(index);
-  applyOverrides(loadOverrideCache());
+  applyCachedSheet();
+  applyChromeTexts();
+  detectHindiVoice();
   route();
   refreshOverrides();
 }).catch(err => {
