@@ -5,7 +5,7 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
-const CACHE_V = '?v=13';
+const CACHE_V = '?v=14';
 const people = () => D.filter(e => e.t === 'p');
 const places = () => D.filter(e => e.t === 'l');
 const uniq = arr => [...new Set((arr || []).filter(Boolean))];
@@ -159,6 +159,7 @@ async function loadChunk(letter) {
     if (al && !M[al]) M[al] = M[d.id];
   });
   chunkLoaded[L] = true;
+  applyOverrides(loadOverrideCache());
 }
 async function loadDetail(id) {
   id = rid(id);
@@ -2123,6 +2124,150 @@ document.addEventListener('click', ev => {
 
 addEventListener('hashchange', route);
 
+
+const SHEET_ID = '1b3RrsHrYPWBF3LFtHlGNW-OII4Wto2t0RmfbzHKAq0w';
+const SHEET_CSV = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?tqx=out:csv&sheet=Meanings';
+const SHEET_CSV_ALT = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/export?format=csv&gid=1681189892';
+const LS_OVERRIDES = 'hn-overrides-v1';
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [], cell = '', i = 0, q = false;
+  const s = String(text || '').replace(/^\uFEFF/, '');
+  while (i < s.length) {
+    const c = s[i];
+    if (q) {
+      if (c === '"') {
+        if (s[i + 1] === '"') { cell += '"'; i += 2; continue; }
+        q = false; i++; continue;
+      }
+      cell += c; i++; continue;
+    }
+    if (c === '"') { q = true; i++; continue; }
+    if (c === ',') { row.push(cell); cell = ''; i++; continue; }
+    if (c === '\r') { i++; continue; }
+    if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; i++; continue; }
+    cell += c; i++;
+  }
+  if (cell.length || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.some(x => String(x || '').trim()));
+}
+function colIndex(head, names) {
+  return head.findIndex(h => names.indexOf(h) !== -1);
+}
+function overridesFromRows(rows) {
+  if (!rows || !rows.length) return {};
+  const head = rows[0].map(h => String(h || '').trim().toLowerCase().replace(/\s+/g, '_'));
+  const iId = colIndex(head, ['id']);
+  const iHi = colIndex(head, ['hindi_name', 'hindiname', 'hi', 'hindi']);
+  const iM = colIndex(head, ['hindi_meaning', 'meaning', 'hindimeaning', 'm']);
+  if (iId < 0) return {};
+  const out = {};
+  for (let r = 1; r < rows.length; r++) {
+    const line = rows[r];
+    const id = String((line && line[iId]) || '').trim();
+    if (!id) continue;
+    const hi = iHi >= 0 ? String(line[iHi] ?? '').trim() : '';
+    const m = iM >= 0 ? String(line[iM] ?? '').trim() : '';
+    if (!hi && !m) continue;
+    out[id] = {};
+    if (hi) out[id].hi = hi;
+    if (m) out[id].m = m;
+  }
+  return out;
+}
+function overridesFromGviz(data) {
+  const table = data && data.table;
+  if (!table) return {};
+  const head = (table.cols || []).map(c => c.label || c.id || '');
+  const body = (table.rows || []).map(r => (r.c || []).map(c => {
+    if (!c) return '';
+    if (c.v == null) return '';
+    return String(c.f != null ? c.f : c.v);
+  }));
+  return overridesFromRows([head].concat(body));
+}
+function loadOverrideCache() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(LS_OVERRIDES) || '{}');
+    return raw && raw.map && typeof raw.map === 'object' ? raw.map : {};
+  } catch (err) { return {}; }
+}
+function saveOverrideCache(map) {
+  try { localStorage.setItem(LS_OVERRIDES, JSON.stringify({ at: Date.now(), map: map || {} })); } catch (err) {}
+}
+function touchOverride(e, o) {
+  if (!e || !o) return;
+  if (o.hi) e.hi = o.hi;
+  if (o.m) e.m = o.m;
+}
+function applyOverrides(map) {
+  if (!map) return;
+  (D || []).forEach(e => { if (e && map[e.id]) touchOverride(e, map[e.id]); });
+  Object.keys(M || {}).forEach(k => {
+    const e = M[k];
+    if (!e) return;
+    const o = map[e.id] || map[k];
+    if (o) touchOverride(e, o);
+  });
+}
+function looksLikeCsv(text) {
+  if (!text || /^\s*</.test(text) || /accounts\.google\.com/.test(text)) return false;
+  const first = String(text).split(/\r?\n/).find(l => l.trim());
+  return !!first && /id|hindi_name|hindi_meaning|english_name/i.test(first);
+}
+function fetchWithTimeout(url, ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal, cache: 'no-store' }).then(r => {
+    if (!r.ok) throw new Error('http ' + r.status);
+    return r.text();
+  }).finally(() => clearTimeout(t));
+}
+function fetchSheetJsonp(ms) {
+  return new Promise((resolve, reject) => {
+    const cb = 'hnSheet_' + Math.random().toString(36).slice(2);
+    const script = document.createElement('script');
+    let done = false;
+    const timer = setTimeout(() => finish(new Error('timeout')), ms);
+    function finish(err, data) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { delete window[cb]; } catch (e) { window[cb] = undefined; }
+      if (script.parentNode) script.parentNode.removeChild(script);
+      if (err) reject(err); else resolve(data);
+    }
+    window[cb] = data => finish(null, data);
+    script.onerror = () => finish(new Error('script'));
+    script.src = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID + '/gviz/tq?sheet=Meanings&tqx=' + encodeURIComponent('out:json;responseHandler:' + cb) + '&_=' + Date.now();
+    document.head.appendChild(script);
+  });
+}
+function fetchSheetOverrides(ms) {
+  ms = ms || 5000;
+  const bust = '&_=' + Date.now();
+  return fetchWithTimeout(SHEET_CSV + bust, ms).then(t => {
+    if (!looksLikeCsv(t)) throw new Error('not csv');
+    return overridesFromRows(parseCsv(t));
+  }).catch(() => fetchWithTimeout(SHEET_CSV_ALT + (SHEET_CSV_ALT.indexOf('?') >= 0 ? bust : '?' + bust.slice(1)), ms).then(t => {
+    if (!looksLikeCsv(t)) throw new Error('not csv');
+    return overridesFromRows(parseCsv(t));
+  })).catch(() => fetchSheetJsonp(ms).then(overridesFromGviz));
+}
+function refreshOverrides() {
+  return fetchSheetOverrides(5000).then(map => {
+    const prev = JSON.stringify(loadOverrideCache());
+    saveOverrideCache(map);
+    applyOverrides(map);
+    if (JSON.stringify(map) === prev) return;
+    const ae = document.activeElement;
+    const typing = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable);
+    if (typing) return;
+    if (typeof route === 'function') { route._keepScroll = true; route(); }
+  }).catch(() => {});
+}
+
 function ingestIndex(index) {
   INDEX = index;
   D = index;
@@ -2159,7 +2304,9 @@ Promise.all([
   STATS = stats || {};
   PLACE_PEOPLE = placePeople || {};
   ingestIndex(index);
+  applyOverrides(loadOverrideCache());
   route();
+  refreshOverrides();
 }).catch(err => {
   console.error(err);
   app.innerHTML = '<p class="px-4 py-8 text-on-surface-variant">Could not load the lexicon. Please refresh.</p>';
