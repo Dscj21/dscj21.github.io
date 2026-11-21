@@ -146,6 +146,23 @@
 
     function find(id) { return rec ? rec(id) : (M[id] || D.find(e => e.id === id)); }
 
+    function eachCopy(fn, id) {
+      const seen = new Set();
+      function go(e) {
+        if (!e || seen.has(e)) return;
+        seen.add(e);
+        fn(e);
+      }
+      if (id) {
+        go(rec ? rec(id) : null);
+        go(M[id]);
+        (D || []).forEach(e => { if (e && e.id === id) go(e); });
+        return;
+      }
+      (D || []).forEach(go);
+      Object.keys(M || {}).forEach(k => go(M[k]));
+    }
+
     function ensure(id, typ) {
       let e = find(id);
       if (e) return e;
@@ -179,13 +196,12 @@
       const typ = str(field(r, ['type', 't'])).toLowerCase();
       if (id) {
         const e = find(id) || ensure(id, typ);
-        touchName(e, r, typ);
+        eachCopy(x => touchName(x, r, typ), e.id);
         return;
       }
       const key = nameKey(en);
       if (!key) return;
-      (D || []).forEach(e => {
-        if (!e) return;
+      eachCopy(e => {
         const full = str(e.en).toLowerCase();
         if (full !== key && nameKey(e.en) !== key) return;
         if (hi) e.hi = hi;
@@ -197,42 +213,46 @@
     (pack.places || []).forEach(r => {
       const id = str(field(r, ['id']));
       if (!id) return;
-      const e = find(id) || ensure(id, 'l');
-      e.t = 'l';
-      const hi = str(field(r, ['hindi_name', 'hi', 'hindi']));
-      const m = str(field(r, ['hindi_meaning', 'meaning', 'm']));
-      const en = str(field(r, ['english_name', 'english', 'en']));
-      if (hi) e.hi = hi;
-      if (m) e.m = m;
-      if (en) e.en = en;
-      const lat = num(field(r, ['lat', 'latitude']));
-      const lon = num(field(r, ['lon', 'lng', 'longitude']));
-      if (lat != null && lon != null) {
-        e.ll = [lat, lon];
-        if (Array.isArray(GEO)) {
-          const g = GEO.find(x => x.id === e.id);
-          if (g) g.ll = [lat, lon];
-          else GEO.push({ id: e.id, hi: e.hi, en: e.en, ll: [lat, lon], hv: e.hv });
+      const e0 = find(id) || ensure(id, 'l');
+      eachCopy(e => {
+        e.t = 'l';
+        const hi = str(field(r, ['hindi_name', 'hi', 'hindi']));
+        const m = str(field(r, ['hindi_meaning', 'meaning', 'm']));
+        const en = str(field(r, ['english_name', 'english', 'en']));
+        if (hi) e.hi = hi;
+        if (m) e.m = m;
+        if (en) e.en = en;
+        const lat = num(field(r, ['lat', 'latitude']));
+        const lon = num(field(r, ['lon', 'lng', 'longitude']));
+        if (lat != null && lon != null) {
+          e.ll = [lat, lon];
+          if (Array.isArray(GEO)) {
+            const g = GEO.find(x => x.id === e.id);
+            if (g) g.ll = [lat, lon];
+            else GEO.push({ id: e.id, hi: e.hi, en: e.en, ll: [lat, lon], hv: e.hv });
+          }
         }
-      }
-      const cat = str(field(r, ['category', 'ft', 'cat']));
-      if (cat) e.ft = cat.toLowerCase();
-      if (isYes(field(r, ['show_on_map_default', 'featured', 'show_default']), false)) e._featured = true;
-      if (!isYes(r.enabled, true)) e._mapOff = true;
+        const cat = str(field(r, ['category', 'ft', 'cat']));
+        if (cat) e.ft = cat.toLowerCase();
+        if (isYes(field(r, ['show_on_map_default', 'featured', 'show_default']), false)) e._featured = true;
+        if (!isYes(r.enabled, true)) e._mapOff = true;
+      }, e0.id);
     });
 
     (pack.exceptions || []).forEach(r => {
       const id = str(field(r, ['id']));
       if (!id) return;
       const typ = str(field(r, ['type', 't'])).toLowerCase();
-      const e = find(id) || ensure(id, typ || 'p');
-      const hi = str(field(r, ['hindi_name', 'hindiname', 'hi', 'hindi']));
-      const m = str(field(r, ['hindi_meaning', 'meaning', 'hindimeaning']));
-      const en = str(field(r, ['english_name', 'english', 'en']));
-      if (hi) e.hi = hi;
-      if (m) e.m = m;
-      if (en) e.en = e.en || en;
-      if (!isYes(r.enabled, true)) e._off = true;
+      const e0 = find(id) || ensure(id, typ || 'p');
+      eachCopy(e => {
+        const hi = str(field(r, ['hindi_name', 'hindiname', 'hi', 'hindi']));
+        const m = str(field(r, ['hindi_meaning', 'meaning', 'hindimeaning']));
+        const en = str(field(r, ['english_name', 'english', 'en']));
+        if (hi) e.hi = hi;
+        if (m) e.m = m;
+        if (en) e.en = e.en || en;
+        if (!isYes(r.enabled, true)) e._off = true;
+      }, e0.id);
     });
 
     if (pack.journeys && pack.journeys.length) {

@@ -5,7 +5,7 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
-const CACHE_V = '?v=16';
+const CACHE_V = '?v=17';
 const WEB_BASE = 'https://dscj21.github.io/bible-names/';
 let SHEET_TEXTS = {};
 let SHEET_QUIZ = [];
