@@ -74,10 +74,19 @@
     return [head].concat(body);
   }
 
+  function baseName(en) {
+    const s = str(en);
+    const m = s.match(/^(.*)\s+\([^)]+\)\s*$/);
+    return (m ? m[1] : s).trim();
+  }
+  function nameKey(en) { return baseName(en).toLowerCase(); }
+
   function packFromTabRows(tabs) {
-    const pack = { names: [], places: [], journeys: [], quiz: [], featured: [], texts: {} };
+    const pack = { names: [], places: [], journeys: [], quiz: [], featured: [], texts: {}, exceptions: [] };
     const namesRows = tabs.Names || tabs.Meanings || tabs.names || tabs.meanings;
     if (namesRows) pack.names = rowsToMaps(namesRows);
+    const exRows = tabs['Name exceptions'] || tabs['Name Exceptions'] || tabs.Exceptions || tabs.exceptions;
+    if (exRows) pack.exceptions = rowsToMaps(exRows);
     if (tabs.Places || tabs.places) pack.places = rowsToMaps(tabs.Places || tabs.places);
     if (tabs.Journeys || tabs.journeys) pack.journeys = rowsToMaps(tabs.Journeys || tabs.journeys);
     if (tabs.Quiz || tabs.quiz) pack.quiz = rowsToMaps(tabs.Quiz || tabs.quiz);
@@ -152,11 +161,7 @@
 
     (D || []).forEach(e => { if (e) { e._off = false; e._mapOff = false; e._featured = false; } });
 
-    (pack.names || []).forEach(r => {
-      const id = str(field(r, ['id']));
-      if (!id) return;
-      const typ = str(field(r, ['type', 't'])).toLowerCase();
-      const e = find(id) || ensure(id, typ);
+    function touchName(e, r, typ) {
       const hi = str(field(r, ['hindi_name', 'hindiname', 'hi', 'hindi']));
       const m = str(field(r, ['hindi_meaning', 'meaning', 'hindimeaning']));
       const en = str(field(r, ['english_name', 'english', 'en']));
@@ -164,6 +169,29 @@
       if (m) e.m = m;
       if (en && !e.en) e.en = en;
       if (!isYes(r.enabled, true)) e._off = true;
+    }
+
+    (pack.names || []).forEach(r => {
+      const id = str(field(r, ['id']));
+      const hi = str(field(r, ['hindi_name', 'hindiname', 'hi', 'hindi']));
+      const m = str(field(r, ['hindi_meaning', 'meaning', 'hindimeaning']));
+      const en = str(field(r, ['english_name', 'english', 'en']));
+      const typ = str(field(r, ['type', 't'])).toLowerCase();
+      if (id) {
+        const e = find(id) || ensure(id, typ);
+        touchName(e, r, typ);
+        return;
+      }
+      const key = nameKey(en);
+      if (!key) return;
+      (D || []).forEach(e => {
+        if (!e) return;
+        const full = str(e.en).toLowerCase();
+        if (full !== key && nameKey(e.en) !== key) return;
+        if (hi) e.hi = hi;
+        if (m) e.m = m;
+        if (!isYes(r.enabled, true)) e._off = true;
+      });
     });
 
     (pack.places || []).forEach(r => {
@@ -191,6 +219,20 @@
       if (cat) e.ft = cat.toLowerCase();
       if (isYes(field(r, ['show_on_map_default', 'featured', 'show_default']), false)) e._featured = true;
       if (!isYes(r.enabled, true)) e._mapOff = true;
+    });
+
+    (pack.exceptions || []).forEach(r => {
+      const id = str(field(r, ['id']));
+      if (!id) return;
+      const typ = str(field(r, ['type', 't'])).toLowerCase();
+      const e = find(id) || ensure(id, typ || 'p');
+      const hi = str(field(r, ['hindi_name', 'hindiname', 'hi', 'hindi']));
+      const m = str(field(r, ['hindi_meaning', 'meaning', 'hindimeaning']));
+      const en = str(field(r, ['english_name', 'english', 'en']));
+      if (hi) e.hi = hi;
+      if (m) e.m = m;
+      if (en) e.en = e.en || en;
+      if (!isYes(r.enabled, true)) e._off = true;
     });
 
     if (pack.journeys && pack.journeys.length) {
@@ -266,7 +308,7 @@
 
   const api = {
     parseCsv, colIndex, rowsToMaps, isYes, looksLikeCsv, gvizToRows,
-    packFromTabRows, applyPack, parseQuizRow, str
+    packFromTabRows, applyPack, parseQuizRow, str, baseName, nameKey
   };
   root.HNSheet = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

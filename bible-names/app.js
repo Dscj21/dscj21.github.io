@@ -5,7 +5,7 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
-const CACHE_V = '?v=15';
+const CACHE_V = '?v=16';
 const WEB_BASE = 'https://dscj21.github.io/bible-names/';
 let SHEET_TEXTS = {};
 let SHEET_QUIZ = [];
@@ -2412,7 +2412,7 @@ addEventListener('hashchange', route);
 
 
 const SHEET_ID = '1b3RrsHrYPWBF3LFtHlGNW-OII4Wto2t0RmfbzHKAq0w';
-const SHEET_TABS = ['Names', 'Places', 'Journeys', 'Quiz', 'Featured', 'Texts'];
+const SHEET_TABS = ['Names', 'Name exceptions', 'Places', 'Journeys', 'Quiz', 'Featured', 'Texts'];
 const LS_OVERRIDES = 'hn-overrides-v1';
 const LS_SHEET = 'hn-sheet-v2';
 const parseCsv = (window.HNSheet && HNSheet.parseCsv) || function () { return []; };
