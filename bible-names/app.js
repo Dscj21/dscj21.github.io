@@ -5,7 +5,7 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
-const CACHE_V = '?v=17';
+const CACHE_V = '?v=18';
 const WEB_BASE = 'https://dscj21.github.io/bible-names/';
 let SHEET_TEXTS = {};
 let SHEET_QUIZ = [];
@@ -583,9 +583,9 @@ function nameCard(e) {
       </button>
     </div>
     <div class="flex flex-col gap-1.5 pt-1">
-      ${e.m ? `<div class="flex items-start gap-1.5 text-on-surface-variant font-body-sm text-body-sm">
-        <span class="material-symbols-outlined text-tertiary text-[16px] mt-0.5">menu_book</span>
-        <span>Meaning: <strong class="text-on-surface font-semibold">“${esc(e.m)}”</strong></span>
+      ${e.m ? `<div class="flex items-start gap-1.5">
+        <span class="material-symbols-outlined text-tertiary text-[16px] mt-0.5 flex-shrink-0">menu_book</span>
+        <span class="min-w-0"><span class="font-label-sm text-label-sm text-on-surface-variant">Meaning</span><br><strong class="hn-meaning hn-meaning-sm">“${esc(e.m)}”</strong></span>
       </div>` : ''}
       <div class="flex items-center gap-2 flex-wrap">
         ${e.ref ? `<button type="button" class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-medium" data-verse="${e.id}">${esc(e.ref)}</button>` : ''}
@@ -611,9 +611,9 @@ function placeCard(e) {
       </div>
     </div>
     <div class="p-3.5 flex flex-col gap-2">
-      ${e.m ? `<div class="flex items-center justify-between text-body-sm font-body-sm gap-2">
-        <span class="text-on-surface-variant font-medium">Original Literal Meaning:</span>
-        <span class="font-semibold text-tertiary text-right">“${esc(e.m)}”</span>
+      ${e.m ? `<div class="flex flex-col gap-0.5 min-w-0">
+        <span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Original Literal Meaning</span>
+        <span class="hn-meaning hn-meaning-sm">“${esc(e.m)}”</span>
       </div>` : ''}
       <div class="flex items-center gap-2 pt-1">
         ${e.ref ? `<button type="button" class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-medium" data-verse="${e.id}">${esc(e.ref)}</button>` : ''}
@@ -867,7 +867,7 @@ function home() {
             <span class="material-symbols-outlined text-[16px]">lightbulb</span>
             Meaning
           </span>
-          <p class="font-body-md text-body-md text-on-surface font-medium leading-relaxed">“${esc(day.m)}”</p>
+          <p class="hn-meaning hn-meaning-md">“${esc(day.m)}”</p>
         </div>` : ''}
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
           ${listenPill(day)}
@@ -990,7 +990,7 @@ function detail(e) {
           <span class="material-symbols-outlined text-[16px]">lightbulb</span>
           Literal Meaning
         </span>
-        ${e.m ? `<p class="font-body-lg text-body-lg text-on-surface font-medium leading-relaxed">“${esc(e.m)}”</p>` : '<p class="font-body-md text-on-surface-variant">No short meaning yet.</p>'}
+        ${e.m ? `<p class="hn-meaning hn-meaning-lg">“${esc(e.m)}”</p>` : '<p class="font-body-md text-on-surface-variant">No short meaning yet.</p>'}
         ${e.hv === false ? '<p class="font-body-sm text-on-surface-variant mt-2">Hindi spelling is unverified — we could not confidently match this name in the IRV verse text, so the English name is shown.</p>' : ''}
       </div>
     </section>
@@ -2118,7 +2118,7 @@ function quizView(hash) {
   } else {
     const ans = M[q.id];
     prompt = q.type === 'name'
-      ? `Whose name means “${esc(ans.m)}”?`
+      ? `Whose name means <span class="hn-meaning hn-meaning-sm">“${esc(ans.m)}”</span>?`
       : q.type === 'father'
         ? `Who is the father of ${esc(ans.hi)} (${esc(shortEn(ans))})?`
         : `What is the meaning of ${esc(ans.hi)} (${esc(shortEn(ans))})?`;
@@ -2135,7 +2135,7 @@ function quizView(hash) {
     ${levelChips(S.level)}
     <div class="bg-surface-container-low rounded-xl p-4 shadow-sm">
       <p class="font-headline-sm text-headline-sm mb-2">${prompt}</p>
-      ${options.map(([val, lab]) => `<button type="button" class="quiz-opt" data-opt="${esc(val)}">${esc(lab)}</button>`).join('')}
+      ${options.map(([val, lab]) => `<button type="button" class="quiz-opt${q.type==='meaning'?' meaning-opt':''}" data-opt="${esc(val)}">${esc(lab)}</button>`).join('')}
     </div>
   </div>`;
   app.querySelectorAll('[data-opt]').forEach(b => b.onclick = () => {
@@ -2155,7 +2155,16 @@ function quizView(hash) {
       onQuizComplete(S);
     }
     saveQuiz(S);
-    setTimeout(() => quizView(quizHash(S)), 700);
+    if (q.explanation) {
+      const host = app.querySelector('.bg-surface-container-low');
+      if (host) {
+        const p = document.createElement('p');
+        p.className = 'quiz-explain';
+        p.textContent = q.explanation;
+        host.appendChild(p);
+      }
+    }
+    setTimeout(() => quizView(quizHash(S)), q.explanation ? 1600 : 700);
   });
 }
 
@@ -2209,7 +2218,7 @@ function godsView() {
         <span class="heb text-primary text-[20px] font-semibold">${esc(e.o)}</span>
       </div>
       <div class="font-label-md text-on-surface-variant">${esc(e.en)} · ${esc(e.pr)}</div>
-      <p class="font-body-md">“${esc(e.m)}”</p>
+      <p class="hn-meaning hn-meaning-md">“${esc(e.m)}”</p>
       <div class="font-label-sm text-tertiary font-semibold">${esc(e.ref)}</div>
       <p class="font-body-sm leading-relaxed bg-surface-container-lowest/80 rounded-lg p-3">${esc(e.v)}</p>
     </article>`).join('')}

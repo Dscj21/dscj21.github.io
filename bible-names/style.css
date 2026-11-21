@@ -298,7 +298,7 @@ a.map-chip{display:inline-flex;align-items:center}
 .home-map-sub{font-size:13px;opacity:.95;margin-top:2px}
 .mk-on .mk-num{background:#5c623b;transform:scale(1.12)}
 .mk-on .mk-pin{background:#5c623b}
-.ps-meaning{margin-top:10px;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:700;font-size:18px;color:#7f2c15}
+.ps-meaning{margin-top:10px;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:700;font-size:22px;line-height:1.35;color:#7f2c15;overflow-wrap:anywhere}
 .ps-note{margin:10px 0 0;font-size:14px;line-height:1.45;color:#1e1b1c}
 .ps-ref{font-weight:600;color:#5c623b;margin-right:6px}
 .ps-sec{margin-top:12px}
@@ -331,3 +331,16 @@ a.map-chip{display:inline-flex;align-items:center}
 .badge-chip.on{background:#efe4c8;color:#6a4a12}
 .badge-ic{font-size:14px}
 .challenge-banner{background:#efe4c8;color:#5c3d10;border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;text-align:center}
+
+/* Prominent Hindi meaning typography */
+.hn-meaning{
+  font-family:"Noto Serif Devanagari","Noto Serif",serif;
+  font-weight:700;
+  color:#7f2c15;
+  overflow-wrap:anywhere;
+}
+.hn-meaning-lg{font-size:22px;line-height:1.35} /* name page: 16px → 22px (~1.4x) */
+.hn-meaning-md{font-size:20px;line-height:1.35} /* Name of the Day: 14px → 20px (~1.4x) */
+.hn-meaning-sm{font-size:17px;line-height:1.35} /* list/search: 12px → 17px (~1.4x) */
+.quiz-opt.meaning-opt{font-size:18px;line-height:1.4;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:600;color:#7f2c15}
+.quiz-explain{margin:12px 0 0;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:700;font-size:18px;line-height:1.35;color:#7f2c15;overflow-wrap:anywhere}
