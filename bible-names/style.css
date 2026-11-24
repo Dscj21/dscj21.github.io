@@ -344,3 +344,5 @@ a.map-chip{display:inline-flex;align-items:center}
 .hn-meaning-sm{font-size:17px;line-height:1.35} /* list/search: 12px → 17px (~1.4x) */
 .quiz-opt.meaning-opt{font-size:18px;line-height:1.4;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:600;color:#7f2c15}
 .quiz-explain{margin:12px 0 0;font-family:"Noto Serif Devanagari","Noto Serif",serif;font-weight:700;font-size:18px;line-height:1.35;color:#7f2c15;overflow-wrap:anywhere}
+
+.hn-meaning-en{display:block;margin-top:4px;font-family:Inter,ui-sans-serif,sans-serif;font-weight:500;font-size:14px;line-height:1.35;color:#89726c}

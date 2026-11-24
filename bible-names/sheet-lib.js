@@ -181,9 +181,11 @@
     function touchName(e, r, typ) {
       const hi = str(field(r, ['hindi_name', 'hindiname', 'hi', 'hindi']));
       const m = str(field(r, ['hindi_meaning', 'meaning', 'hindimeaning']));
+      const em = str(field(r, ['english_meaning', 'englishmeaning', 'en_meaning', 'em']));
       const en = str(field(r, ['english_name', 'english', 'en']));
       if (hi) e.hi = hi;
       if (m) e.m = m;
+      if (em) e.em = em;
       if (en && !e.en) e.en = en;
       if (!isYes(r.enabled, true)) e._off = true;
     }
@@ -206,6 +208,8 @@
         if (full !== key && nameKey(e.en) !== key) return;
         if (hi) e.hi = hi;
         if (m) e.m = m;
+        const em = str(field(r, ['english_meaning', 'englishmeaning', 'en_meaning', 'em']));
+        if (em) e.em = em;
         if (!isYes(r.enabled, true)) e._off = true;
       });
     });
@@ -218,9 +222,11 @@
         e.t = 'l';
         const hi = str(field(r, ['hindi_name', 'hi', 'hindi']));
         const m = str(field(r, ['hindi_meaning', 'meaning', 'm']));
+        const em = str(field(r, ['english_meaning', 'englishmeaning', 'en_meaning', 'em']));
         const en = str(field(r, ['english_name', 'english', 'en']));
         if (hi) e.hi = hi;
         if (m) e.m = m;
+        if (em) e.em = em;
         if (en) e.en = en;
         const lat = num(field(r, ['lat', 'latitude']));
         const lon = num(field(r, ['lon', 'lng', 'longitude']));
@@ -247,9 +253,11 @@
       eachCopy(e => {
         const hi = str(field(r, ['hindi_name', 'hindiname', 'hi', 'hindi']));
         const m = str(field(r, ['hindi_meaning', 'meaning', 'hindimeaning']));
+        const em = str(field(r, ['english_meaning', 'englishmeaning', 'en_meaning', 'em']));
         const en = str(field(r, ['english_name', 'english', 'en']));
         if (hi) e.hi = hi;
         if (m) e.m = m;
+        if (em) e.em = em;
         if (en) e.en = e.en || en;
         if (!isYes(r.enabled, true)) e._off = true;
       }, e0.id);

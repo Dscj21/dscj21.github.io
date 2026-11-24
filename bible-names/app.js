@@ -5,7 +5,7 @@ const shortEn = e => (e.en || '').split(' (')[0];
 const shortHi = e => (e.hi || '').split(' (')[0];
 const isGk = e => (e.s || '')[0] === 'G';
 const origCls = e => isGk(e) ? 'gk' : 'heb';
-const CACHE_V = '?v=18';
+const CACHE_V = '?v=19';
 const WEB_BASE = 'https://dscj21.github.io/bible-names/';
 let SHEET_TEXTS = {};
 let SHEET_QUIZ = [];
@@ -585,7 +585,7 @@ function nameCard(e) {
     <div class="flex flex-col gap-1.5 pt-1">
       ${e.m ? `<div class="flex items-start gap-1.5">
         <span class="material-symbols-outlined text-tertiary text-[16px] mt-0.5 flex-shrink-0">menu_book</span>
-        <span class="min-w-0"><span class="font-label-sm text-label-sm text-on-surface-variant">Meaning</span><br><strong class="hn-meaning hn-meaning-sm">“${esc(e.m)}”</strong></span>
+        <span class="min-w-0"><span class="font-label-sm text-label-sm text-on-surface-variant">Meaning</span><br><strong class="hn-meaning hn-meaning-sm">“${esc(e.m)}”</strong>${e.em ? `<span class="hn-meaning-en">“${esc(e.em)}”</span>` : ''}</span>
       </div>` : ''}
       <div class="flex items-center gap-2 flex-wrap">
         ${e.ref ? `<button type="button" class="px-2 py-0.5 rounded bg-secondary-container text-on-secondary-container font-label-sm text-label-sm font-medium" data-verse="${e.id}">${esc(e.ref)}</button>` : ''}
@@ -613,7 +613,7 @@ function placeCard(e) {
     <div class="p-3.5 flex flex-col gap-2">
       ${e.m ? `<div class="flex flex-col gap-0.5 min-w-0">
         <span class="font-label-sm text-label-sm text-on-surface-variant font-medium">Original Literal Meaning</span>
-        <span class="hn-meaning hn-meaning-sm">“${esc(e.m)}”</span>
+        <span class="hn-meaning hn-meaning-sm">“${esc(e.m)}”</span>${e.em ? `<span class="hn-meaning-en">“${esc(e.em)}”</span>` : ''}
       </div>` : ''}
       <div class="flex items-center gap-2 pt-1">
         ${e.ref ? `<button type="button" class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-label-sm text-label-sm font-medium" data-verse="${e.id}">${esc(e.ref)}</button>` : ''}
@@ -867,7 +867,7 @@ function home() {
             <span class="material-symbols-outlined text-[16px]">lightbulb</span>
             Meaning
           </span>
-          <p class="hn-meaning hn-meaning-md">“${esc(day.m)}”</p>
+          <p class="hn-meaning hn-meaning-md">“${esc(day.m)}”</p>${day.em ? `<p class="hn-meaning-en">“${esc(day.em)}”</p>` : ''}
         </div>` : ''}
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
           ${listenPill(day)}
@@ -990,7 +990,7 @@ function detail(e) {
           <span class="material-symbols-outlined text-[16px]">lightbulb</span>
           Literal Meaning
         </span>
-        ${e.m ? `<p class="hn-meaning hn-meaning-lg">“${esc(e.m)}”</p>` : '<p class="font-body-md text-on-surface-variant">No short meaning yet.</p>'}
+        ${e.m ? `<p class="hn-meaning hn-meaning-lg">“${esc(e.m)}”</p>` : '<p class="font-body-md text-on-surface-variant">No short meaning yet.</p>'}${e.em ? `<p class="hn-meaning-en">“${esc(e.em)}”</p>` : ''}
         ${e.hv === false ? '<p class="font-body-sm text-on-surface-variant mt-2">Hindi spelling is unverified — we could not confidently match this name in the IRV verse text, so the English name is shown.</p>' : ''}
       </div>
     </section>
